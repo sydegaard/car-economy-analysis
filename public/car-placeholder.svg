@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" preserveAspectRatio="xMidYMid slice">
+  <rect width="800" height="500" fill="hsl(230 14% 11%)"/>
+  <g fill="none" stroke="hsl(220 10% 40%)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" transform="translate(250 190)">
+    <path d="M20 90 L45 40 Q52 25 70 25 L190 25 Q208 25 220 40 L250 90"/>
+    <path d="M5 90 L295 90 Q300 90 300 100 L300 130 Q300 140 290 140 L15 140 Q5 140 5 130 Z"/>
+    <circle cx="75" cy="140" r="26" fill="hsl(230 14% 11%)"/>
+    <circle cx="225" cy="140" r="26" fill="hsl(230 14% 11%)"/>
+  </g>
+  <text x="400" y="410" text-anchor="middle" font-family="system-ui, sans-serif" font-size="24" fill="hsl(220 10% 45%)">Bilde utilgjengelig</text>
+</svg>
