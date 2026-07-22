@@ -1,39 +1,57 @@
-**Welcome to your Base44 project**
+# Bilfinansieringsanalyse
 
-**About**
+Interactive car-financing calculator for the Norwegian market. Compares 7 financing
+options (cash, several car loans, green loan, mortgage, consumer loan, leasing),
+computes opportunity cost, and gives tailored advice — all client-side, no backend.
 
-View and Edit  your app on [Base44.com](http://Base44.com)
+Originally prototyped on base44 and since decoupled into a standalone
+Vite + React app.
 
-This project contains everything you need to run your app locally.
+## Tech stack
 
-**Edit the code in your local development environment**
+| Layer    | Technology                     |
+|----------|--------------------------------|
+| Build    | Vite 6                         |
+| UI       | React 18 + React Router        |
+| Styling  | Tailwind CSS 3 + shadcn/ui     |
+| Icons    | lucide-react                   |
+| Backend  | None — 100% client-side        |
 
-Any change pushed to the repo will also be reflected in the Base44 Builder.
+## Getting started
 
-**Prerequisites:**
-
-1. Clone the repository using the project's Git URL
-2. Navigate to the project directory
-3. Install dependencies: `npm install`
-4. Create an `.env.local` file and set the right environment variables
-
-```
-VITE_BASE44_APP_ID=your_app_id
-VITE_BASE44_APP_BASE_URL=your_backend_url
-
-e.g.
-VITE_BASE44_APP_ID=cbef744a8545c389ef439ea6
-VITE_BASE44_APP_BASE_URL=https://my-to-do-list-81bfaad7.base44.app
+```bash
+npm install
+npm run dev        # http://localhost:5173
 ```
 
-Run the app: `npm run dev`
+## Scripts
 
-**Publish your changes**
+| Command             | Description                          |
+|---------------------|--------------------------------------|
+| `npm run dev`       | Start the dev server                 |
+| `npm run build`     | Production build to `dist/`          |
+| `npm run preview`   | Preview the production build         |
+| `npm run lint`      | Lint (`--fix` variant: `lint:fix`)   |
+| `npm run typecheck` | Type-check via `jsconfig.json`       |
 
-Open [Base44.com](http://Base44.com) and click on Publish.
+## Project structure
 
-**Docs & Support**
+```
+src/
+├── App.jsx                     # Router
+├── main.jsx                    # Entry point
+├── index.css                   # Design tokens (dark neon theme)
+├── pages/
+│   ├── Calculator.jsx          # Main page
+│   └── NotFound.jsx            # 404
+├── components/
+│   ├── calculator/             # Feature components
+│   └── ui/                     # shadcn/ui primitives
+├── hooks/
+│   └── useCalculations.js      # All calculation logic
+├── lib/                        # utils (cn helper)
+└── utils/                      # createPageUrl helper
+```
 
-Documentation: [https://docs.base44.com/Integrations/Using-GitHub](https://docs.base44.com/Integrations/Using-GitHub)
-
-Support: [https://app.base44.com/support](https://app.base44.com/support)
+> ⚠️ Disclaimer: This is an indicative analysis. Interest rates are based on the
+> 2026 market. Contact your bank for exact offers.

@@ -1,5 +1,4 @@
 import { formatKR } from "@/hooks/useCalculations";
-import { Badge } from "@/components/ui/badge";
 
 const keys = ['kontant', 'billån1', 'billån2', 'grønt', 'bolig', 'forbruk', 'leasing'];
 

@@ -6,7 +6,7 @@ const MD_CONTENT = `# Bilfinansieringsanalyse
 
 ## Oversikt
 
-Dette er en interaktiv webapplikasjon bygget på Base44-platformen som hjelper brukere med å analysere og sammenligne ulike finansieringsmetoder for bilkjøp i det norske markedet. Appen tar inn brukerens økonomiske parametere og beregner total kostnad, månedlige utgifter, alternativkostnad og gir personlig tilpassede råd.
+Dette er en interaktiv webapplikasjon som hjelper brukere med å analysere og sammenligne ulike finansieringsmetoder for bilkjøp i det norske markedet. Appen tar inn brukerens økonomiske parametere og beregner total kostnad, månedlige utgifter, alternativkostnad og gir personlig tilpassede råd.
 
 ## Nøkkelfunksjoner
 
@@ -27,7 +27,7 @@ Dette er en interaktiv webapplikasjon bygget på Base44-platformen som hjelper b
 | Icons | lucide-react |
 | Ruting | react-router-dom |
 | State | React hooks (useState, useMemo) |
-| Plattform | Base44 BaaS (auth, hosting, database) |
+| Backend | Ingen — 100% klientside |
 
 ## Finansieringsrenter (2026-markedet)
 
@@ -118,7 +118,7 @@ src/
 │   └── ui/                          # shadcn/ui komponenter
 ├── hooks/
 │   └── useCalculations.js           # All beregningslogikk
-└── lib/                             # Auth, utils, query-client
+└── lib/                             # utils
 \`\`\`
 
 ## Designsystem
@@ -142,7 +142,7 @@ Dette er en veiledende analyse. Renter er basert på markedet 2026. Kontakt bank
 
 ---
 
-*Generert fra Bilfinansieringsanalyse-appen på Base44.*
+*Generert fra Bilfinansieringsanalyse-appen.*
 `;
 
 export default function DownloadMarkdownButton() {
