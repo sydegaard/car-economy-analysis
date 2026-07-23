@@ -7,7 +7,6 @@ import ConclusionBox from "../components/calculator/ConclusionBox";
 import AdviceGrid from "../components/calculator/AdviceGrid";
 import CarCarousel from "../components/calculator/CarCarousel";
 import SensitivitySlider from "../components/calculator/SensitivitySlider";
-import DownloadMarkdownButton from "../components/calculator/DownloadMarkdownButton";
 
 const DEFAULT_VALUES = {
   bilPris: 350000,
@@ -98,9 +97,6 @@ export default function Calculator() {
             Kontakt bank for nøyaktige tilbud. Verditap og driftskostnader er anslag —
             juster dem for din bil for et mer nøyaktig totalregnestykke.
           </p>
-          <div className="mt-6">
-            <DownloadMarkdownButton />
-          </div>
         </footer>
       </div>
     </div>
