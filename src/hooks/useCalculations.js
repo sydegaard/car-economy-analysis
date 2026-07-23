@@ -1,13 +1,13 @@
 import { useMemo } from 'react';
 
 const RATES = {
-  kontant: { rate: 0, label: '1. Kontant', short: 'Kontant' },
-  billån1: { rate: 5.19, label: '2. Billån (Spb. Sør)', short: 'Spb. Sør' },
-  billån2: { rate: 8.06, label: '3. Billån (Spb. 1)', short: 'Spb. 1' },
-  grønt: { rate: 5.30, label: '4. Grønt billån', short: 'Grønt' },
-  bolig: { rate: 5.40, label: '5. Boliglån', short: 'Boliglån' },
-  forbruk: { rate: 16.40, label: '6. Forbrukslån', short: 'Forbruk' },
-  leasing: { rate: null, label: '7. Privatleasing', short: 'Leasing' },
+  kontant: { rate: 0, fee: 0, label: '1. Kontant', short: 'Kontant' },
+  billån1: { rate: 5.19, fee: 1500, label: '2. Billån (Spb. Sør)', short: 'Spb. Sør' },
+  billån2: { rate: 8.06, fee: 1500, label: '3. Billån (Spb. 1)', short: 'Spb. 1' },
+  grønt: { rate: 5.30, fee: 1500, label: '4. Grønt billån', short: 'Grønt' },
+  bolig: { rate: 5.40, fee: 3500, label: '5. Boliglån', short: 'Boliglån' },
+  forbruk: { rate: 16.40, fee: 1000, label: '6. Forbrukslån', short: 'Forbruk' },
+  leasing: { rate: null, fee: 0, label: '7. Privatleasing', short: 'Leasing' },
 };
 
 function calcMonthly(principal, annualRate, years) {
@@ -33,10 +33,18 @@ export function formatKR(value) {
 }
 
 export default function useCalculations(inputs) {
-  const { bilPris, egenkapital, løpetid, avkastning, skatt, sparepenger, inntekt } = inputs;
+  const { bilPris, egenkapital, løpetid, avkastning, skatt, sparepenger, inntekt, verditap, driftskostnader, leasingpris, renteJustering } = inputs;
 
   return useMemo(() => {
     const loanAmount = Math.max(0, bilPris - egenkapital);
+
+    // Total depreciation over the ownership period — on the FULL car price,
+    // not the loan amount (you lose value on the whole car regardless of financing).
+    const totalDepreciation = bilPris * (1 - Math.pow(1 - verditap / 100, løpetid));
+    // Running costs (fuel/charging, insurance, service, tolls) — equal across all
+    // scenarios since it's the same car; applies to leasing too.
+    const monthlyDrift = driftskostnader / 12;
+    const totalDrift = driftskostnader * løpetid;
 
     const scenarios = {};
     let minCost = Infinity;
@@ -44,34 +52,55 @@ export default function useCalculations(inputs) {
     let bestKey = null;
     let worstKey = null;
 
-    Object.entries(RATES).forEach(([key, { rate, label, short }]) => {
+    const rateShift = renteJustering || 0;
+
+    Object.entries(RATES).forEach(([key, { rate, fee, label, short }]) => {
       if (rate === null) {
+        // Leasing: computed from the user's monthly lease price. No equity or
+        // depreciation (you don't own it); drift still applies. Not rate-sensitive.
         scenarios[key] = {
           label,
           short,
           rate: null,
-          monthly: null,
+          fee,
+          monthly: leasingpris,
           totalInterest: null,
           interestAfterTax: null,
+          monthlyTotal: leasingpris + monthlyDrift,
+          totalCost: leasingpris * 12 * løpetid + totalDrift,
         };
         return;
       }
 
-      const monthly = calcMonthly(loanAmount, rate, løpetid);
-      const totalInterest = calcTotalInterest(loanAmount, rate, løpetid, monthly);
+      // Sensitivity: shift loan rates by renteJustering (kontant stays 0, no rate
+      // to shift). Floor at 0 so a large negative shift can't invent a discount.
+      const adjRate = key === 'kontant' ? 0 : Math.max(0, rate + rateShift);
+      const monthly = calcMonthly(loanAmount, adjRate, løpetid);
+      const totalInterest = calcTotalInterest(loanAmount, adjRate, løpetid, monthly);
       const interestAfterTax = totalInterest * (1 - skatt / 100);
+      const monthlyTotal = monthly + monthlyDrift;
+      const totalCost = interestAfterTax + fee + totalDepreciation + totalDrift;
 
-      scenarios[key] = { label, short, rate, monthly, totalInterest, interestAfterTax };
+      scenarios[key] = { label, short, rate: adjRate, fee, monthly, totalInterest, interestAfterTax, monthlyTotal, totalCost };
 
       if (key !== 'kontant') {
-        if (interestAfterTax < minCost) { minCost = interestAfterTax; bestKey = key; }
-        if (interestAfterTax > maxCost) { maxCost = interestAfterTax; worstKey = key; }
+        // Rank loans by after-tax interest plus the establishment fee.
+        const loanCost = interestAfterTax + fee;
+        if (loanCost < minCost) { minCost = loanCost; bestKey = key; }
+        if (loanCost > maxCost) { maxCost = loanCost; worstKey = key; }
       }
     });
 
     // Opportunity cost
     const lostPerYear = egenkapital * (avkastning / 100);
     const lostTotal = lostPerYear * løpetid;
+    // Risk bands: what the tied-up equity would earn under pessimistic / moderate /
+    // optimistic return assumptions (linear, matching the base opportunity-cost model).
+    const returnBands = [
+      { pct: 3, label: 'Pessimistisk', lostTotal: egenkapital * 0.03 * løpetid },
+      { pct: 5, label: 'Moderat', lostTotal: egenkapital * 0.05 * løpetid },
+      { pct: 7, label: 'Optimistisk', lostTotal: egenkapital * 0.07 * løpetid },
+    ];
     const bufferAfterPurchase = sparepenger - bilPris;
     const monthlyPercent = inntekt > 0 && scenarios.billån1?.monthly
       ? (scenarios.billån1.monthly / inntekt) * 100
@@ -87,11 +116,11 @@ export default function useCalculations(inputs) {
         title: 'BETAL KONTANT — billigst totalt',
         detail: `Tapt avkastning (${formatKR(lostTotal)}) er lavere enn rentekostnaden på selv det billigste lånet (${formatKR(cheapestLoan)}). Du sparer penger på å betale bilen kontant.`,
       };
-    } else if (avkastning > RATES.billån1.rate && scenarios.billån1.interestAfterTax < lostTotal) {
+    } else if (avkastning > scenarios.billån1.rate && scenarios.billån1.interestAfterTax < lostTotal) {
       conclusion = {
         type: 'loan',
         title: 'TA OPP LÅN — Behold sparingen',
-        detail: `Forventet avkastning (${avkastning}%) er høyere enn billånsrenten (${RATES.billån1.rate}%). Ved å låne kan du tjene ${formatKR(lostTotal - scenarios.billån1.interestAfterTax)} mer enn rentekostnaden.`,
+        detail: `Forventet avkastning (${avkastning}%) er høyere enn billånsrenten (${scenarios.billån1.rate.toFixed(2)}%). Ved å låne kan du tjene ${formatKR(lostTotal - scenarios.billån1.interestAfterTax)} mer enn rentekostnaden.`,
       };
     } else {
       conclusion = {
@@ -99,6 +128,31 @@ export default function useCalculations(inputs) {
         title: 'VURDER DELVIS FINANSIERING',
         detail: `Forskjellen er liten. Vurder å betale 50–70% kontant og låne resten. Da beholder du likviditet uten å betale for mye i renter.`,
       };
+    }
+
+    // The largest real cost is usually depreciation, not interest — flag it so the
+    // recommendation is read in a total-cost-of-ownership context.
+    if (totalDepreciation > 0) {
+      conclusion.detail += ` Merk: Verditapet over ${løpetid} år (${formatKR(totalDepreciation)}) er som regel den største kostnaden ved bileie — se «Total kostnad» i tabellen for det fulle bildet.`;
+    }
+
+    // Risk sensitivity of the cash-vs-loan call: the recommendation flips depending
+    // on realised return. Show both ends of the band.
+    const lowBand = returnBands[0].lostTotal;
+    const highBand = returnBands[2].lostTotal;
+    if (cheapestLoan < Infinity && egenkapital > 0) {
+      const lowPart = lowBand < cheapestLoan
+        ? `Ved lav avkastning (3%) lønner det seg å betale kontant`
+        : `Ved lav avkastning (3%) er lån fortsatt konkurransedyktig`;
+      const highPart = highBand > cheapestLoan
+        ? `ved høy avkastning (7%) lønner det seg å låne og beholde sparingen`
+        : `selv ved høy avkastning (7%) er forskjellen liten`;
+      conclusion.detail += ` Følsomhet: ${lowPart}, mens ${highPart}.`;
+    }
+
+    // Reflect an active rate-sensitivity shift in the recommendation text.
+    if (rateShift !== 0) {
+      conclusion.detail += ` (Beregnet med en rentejustering på ${rateShift > 0 ? '+' : ''}${rateShift.toFixed(2)} prosentpoeng.)`;
     }
 
     // Advice
@@ -142,9 +196,12 @@ export default function useCalculations(inputs) {
       scenarios,
       bestKey,
       worstKey,
-      opportunityCost: { lostPerYear, lostTotal, bufferAfterPurchase, monthlyPercent },
+      totalDepreciation,
+      totalDrift,
+      monthlyDrift,
+      opportunityCost: { lostPerYear, lostTotal, bufferAfterPurchase, monthlyPercent, returnBands },
       conclusion,
       advice,
     };
-  }, [bilPris, egenkapital, løpetid, avkastning, skatt, sparepenger, inntekt]);
+  }, [bilPris, egenkapital, løpetid, avkastning, skatt, sparepenger, inntekt, verditap, driftskostnader, leasingpris, renteJustering]);
 }

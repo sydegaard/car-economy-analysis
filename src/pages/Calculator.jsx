@@ -6,6 +6,7 @@ import OpportunityCost from "../components/calculator/OpportunityCost";
 import ConclusionBox from "../components/calculator/ConclusionBox";
 import AdviceGrid from "../components/calculator/AdviceGrid";
 import CarCarousel from "../components/calculator/CarCarousel";
+import SensitivitySlider from "../components/calculator/SensitivitySlider";
 import DownloadMarkdownButton from "../components/calculator/DownloadMarkdownButton";
 
 const DEFAULT_VALUES = {
@@ -16,6 +17,10 @@ const DEFAULT_VALUES = {
   skatt: 28,
   sparepenger: 500000,
   inntekt: 50000,
+  verditap: 15,
+  driftskostnader: 30000,
+  leasingpris: 5500,
+  renteJustering: 0,
 };
 
 export default function Calculator() {
@@ -66,10 +71,17 @@ export default function Calculator() {
             <InputSection values={values} onChange={handleChange} />
           </div>
 
+          <SensitivitySlider
+            value={values.renteJustering}
+            onChange={(val) => handleChange("renteJustering", val)}
+          />
+
           <ScenarioTable
             scenarios={result.scenarios}
             bestKey={result.bestKey}
             worstKey={result.worstKey}
+            totalDepreciation={result.totalDepreciation}
+            totalDrift={result.totalDrift}
           />
 
           <OpportunityCost data={result.opportunityCost} løpetid={values.løpetid} />
@@ -83,7 +95,8 @@ export default function Calculator() {
         <footer className="mt-16 pt-8 border-t border-border/30 text-center">
           <p className="text-xs text-muted-foreground leading-relaxed max-w-xl mx-auto">
             ⚠️ Dette er en veiledende analyse. Renter er basert på markedet 2026.
-            Kontakt bank for nøyaktige tilbud. Privatleasing er vist som referanse.
+            Kontakt bank for nøyaktige tilbud. Verditap og driftskostnader er anslag —
+            juster dem for din bil for et mer nøyaktig totalregnestykke.
           </p>
           <div className="mt-6">
             <DownloadMarkdownButton />

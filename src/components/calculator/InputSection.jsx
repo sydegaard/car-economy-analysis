@@ -13,6 +13,9 @@ const fields = [
   { id: 'avkastning', label: 'Forventet avkastning (%)', hint: 'Årlig avkastning på indeksfond/aksjer', step: 0.5 },
   { id: 'sparepenger', label: 'Totale sparepenger', hint: 'Inkl. BSU, fond, bankinnskudd', step: 50000 },
   { id: 'inntekt', label: 'Månedlig inntekt', hint: 'Etter skatt ca.', step: 5000 },
+  { id: 'verditap', label: 'Årlig verditap (%)', hint: 'Elbil 10–15% · Bensin 15–20% · Luksus 20–30%', step: 1, min: 0, max: 40 },
+  { id: 'driftskostnader', label: 'Årlige driftskostnader', hint: 'Forsikring + drivstoff/strøm + service + bom', step: 5000 },
+  { id: 'leasingpris', label: 'Månedlig leasingpris', hint: 'Kun leieavgift — drift regnes separat', step: 500 },
 ];
 
 function MarginalskattField({ value, onChange }) {

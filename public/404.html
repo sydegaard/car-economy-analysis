@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="nb">
+  <head>
+    <meta charset="utf-8" />
+    <title>Bilfinansieringsanalyse</title>
+    <!--
+      SPA fallback for GitHub Pages (rafgraph/spa-github-pages).
+      Pages serves this 404.html for any unknown path; it encodes the path into a
+      query string and redirects to the app root, where index.html restores it.
+      pathSegmentsToKeep = 1 keeps the project-page base (/car-economy-analysis/).
+    -->
+    <script type="text/javascript">
+      var pathSegmentsToKeep = 1;
+      var l = window.location;
+      l.replace(
+        l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
+        l.pathname.split('/').slice(0, 1 + pathSegmentsToKeep).join('/') + '/?/' +
+        l.pathname.slice(1).split('/').slice(pathSegmentsToKeep).join('/').replace(/&/g, '~and~') +
+        (l.search ? '&' + l.search.slice(1).replace(/&/g, '~and~') : '') +
+        l.hash
+      );
+    </script>
+  </head>
+  <body></body>
+</html>

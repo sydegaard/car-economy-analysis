@@ -19,8 +19,10 @@ function StatCard({ label, value, variant = 'default' }) {
   );
 }
 
+const bandVariant = { 3: 'danger', 5: 'default', 7: 'success' };
+
 export default function OpportunityCost({ data, løpetid }) {
-  const { lostPerYear, lostTotal, bufferAfterPurchase, monthlyPercent } = data;
+  const { lostPerYear, lostTotal, bufferAfterPurchase, monthlyPercent, returnBands } = data;
 
   const bufferVariant = bufferAfterPurchase < 50000 ? 'danger' : 'success';
   const percentVariant = monthlyPercent > 15 ? 'danger' : monthlyPercent > 10 ? 'warning' : 'success';
@@ -36,6 +38,24 @@ export default function OpportunityCost({ data, løpetid }) {
         <StatCard label="Buffer etter kjøp" value={formatKR(bufferAfterPurchase)} variant={bufferVariant} />
         <StatCard label="Månedskostnad i % av inntekt" value={`${monthlyPercent.toFixed(1)}%`} variant={percentVariant} />
       </div>
+
+      <h3 className="text-sm font-bold text-foreground/80 uppercase tracking-widest mt-8 mb-4">
+        Risiko: tapt avkastning ved ulik utvikling (over {løpetid} år)
+      </h3>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {returnBands?.map((b) => (
+          <StatCard
+            key={b.pct}
+            label={`${b.label} · ${b.pct}%`}
+            value={formatKR(b.lostTotal)}
+            variant={bandVariant[b.pct] ?? 'default'}
+          />
+        ))}
+      </div>
+      <p className="text-xs text-muted-foreground leading-relaxed mt-3">
+        Avkastning er usikker. Ved lav avkastning taper du lite på å binde opp egenkapitalen
+        (kontant lønner seg), ved høy avkastning taper du mer (lån lønner seg).
+      </p>
     </section>
   );
 }
