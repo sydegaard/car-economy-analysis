@@ -32,6 +32,29 @@ export function formatKR(value) {
   }).format(value);
 }
 
+// Financing options for the model-vs-model comparison: cash + the loans (leasing is
+// excluded since its price is a single global input, not per-model). Labels have the
+// leading "N." numbering stripped for a cleaner dropdown.
+export const FINANCING_OPTIONS = Object.entries(RATES)
+  .filter(([, r]) => r.rate !== null)
+  .map(([key, r]) => ({ key, label: r.label.replace(/^\d+\.\s*/, ''), rate: r.rate, fee: r.fee }));
+
+// Reusable total-cost-of-ownership calculation for a single car/price. Same formulas
+// as the main scenario loop (annuity loan, after-tax interest, depreciation on the full
+// price, flat running costs). Used by useCalculations and by CompareCars.
+export function computeOwnership(price, { egenkapital, løpetid, skatt, verditap, driftskostnader, rate, fee = 0 }) {
+  const loanAmount = Math.max(0, price - egenkapital);
+  const totalDepreciation = price * (1 - Math.pow(1 - verditap / 100, løpetid));
+  const monthlyDrift = driftskostnader / 12;
+  const totalDrift = driftskostnader * løpetid;
+  const monthly = calcMonthly(loanAmount, rate, løpetid);
+  const totalInterest = calcTotalInterest(loanAmount, rate, løpetid, monthly);
+  const interestAfterTax = totalInterest * (1 - skatt / 100);
+  const monthlyTotal = monthly + monthlyDrift;
+  const totalCost = interestAfterTax + fee + totalDepreciation + totalDrift;
+  return { loanAmount, monthly, totalInterest, interestAfterTax, fee, totalDepreciation, totalDrift, monthlyTotal, totalCost };
+}
+
 export default function useCalculations(inputs) {
   const { bilPris, egenkapital, løpetid, avkastning, skatt, sparepenger, inntekt, verditap, driftskostnader, leasingpris, renteJustering } = inputs;
 

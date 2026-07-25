@@ -6,6 +6,7 @@ import OpportunityCost from "../components/calculator/OpportunityCost";
 import ConclusionBox from "../components/calculator/ConclusionBox";
 import AdviceGrid from "../components/calculator/AdviceGrid";
 import CarCarousel from "../components/calculator/CarCarousel";
+import CompareCars from "../components/calculator/CompareCars";
 import SensitivitySlider from "../components/calculator/SensitivitySlider";
 
 const DEFAULT_VALUES = {
@@ -81,9 +82,19 @@ export default function Calculator() {
             worstKey={result.worstKey}
             totalDepreciation={result.totalDepreciation}
             totalDrift={result.totalDrift}
+            løpetid={values.løpetid}
           />
 
           <OpportunityCost data={result.opportunityCost} løpetid={values.løpetid} />
+
+          <CompareCars
+            egenkapital={values.egenkapital}
+            løpetid={values.løpetid}
+            skatt={values.skatt}
+            verditap={values.verditap}
+            driftskostnader={values.driftskostnader}
+            bestKey={result.bestKey}
+          />
 
           <ConclusionBox conclusion={result.conclusion} />
 

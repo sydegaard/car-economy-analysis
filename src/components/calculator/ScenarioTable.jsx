@@ -7,7 +7,8 @@ function CellValue({ value, isCurrency = true }) {
   return <span className="font-mono">{isCurrency ? formatKR(value) : value}</span>;
 }
 
-export default function ScenarioTable({ scenarios, bestKey, worstKey, totalDepreciation, totalDrift }) {
+export default function ScenarioTable({ scenarios, bestKey, worstKey, totalDepreciation, totalDrift, løpetid }) {
+  const eierperiode = `Eierperiode, ${løpetid} år`;
   const rows = [
     {
       label: 'Effektiv rente',
@@ -44,7 +45,7 @@ export default function ScenarioTable({ scenarios, bestKey, worstKey, totalDepre
       render: (s) => <CellValue value={s.fee} />,
     },
     {
-      label: 'Verditap (eierperiode)',
+      label: `Verditap (${eierperiode})`,
       render: (s, key) =>
         key === 'leasing'
           ? <span className="text-muted-foreground italic">Ikke eier</span>
@@ -56,10 +57,11 @@ export default function ScenarioTable({ scenarios, bestKey, worstKey, totalDepre
     },
     {
       label: 'Total månedskostnad',
+      highlight: true,
       render: (s) => <CellValue value={s.monthlyTotal} />,
     },
     {
-      label: 'Total kostnad (eierperiode)',
+      label: `Total kostnad (${eierperiode})`,
       emphasis: true,
       render: (s) => <CellValue value={s.totalCost} />,
     },
@@ -99,21 +101,35 @@ export default function ScenarioTable({ scenarios, bestKey, worstKey, totalDepre
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, i) => (
-              <tr
-                key={row.label}
-                className={`border-t ${row.emphasis ? 'border-t-2 border-primary/40 bg-primary/5 font-semibold' : 'border-border/50'} ${!row.emphasis && i % 2 === 0 ? '' : !row.emphasis ? 'bg-secondary/30' : ''} transition-colors hover:bg-secondary/60`}
-              >
-                <td className={`p-4 font-semibold text-xs uppercase tracking-wider sticky left-0 z-10 ${row.emphasis ? 'text-foreground bg-primary/10' : 'text-foreground/80 bg-card'}`}>
-                  {row.label}
-                </td>
-                {keys.map((key) => (
-                  <td key={key} className={`p-4 text-right ${row.emphasis ? 'text-base' : ''} ${key === bestKey ? 'text-[hsl(var(--neon-green))]' : key === worstKey ? 'text-destructive' : 'text-foreground'}`}>
-                    {row.render(scenarios[key], key)}
+            {rows.map((row, i) => {
+              const rowCls = row.emphasis
+                ? 'border-t-2 border-primary/40 bg-primary/5 font-semibold'
+                : row.highlight
+                  ? 'bg-[hsl(var(--warning))]/[0.08] font-semibold'
+                  : `border-t border-border/50 ${i % 2 === 0 ? '' : 'bg-secondary/30'}`;
+
+              const labelCls = row.emphasis
+                ? 'text-foreground bg-primary/10'
+                : row.highlight
+                  ? 'text-[hsl(var(--warning))] bg-card border-y-2 border-l-2 border-[hsl(var(--warning))]'
+                  : 'text-foreground/80 bg-card';
+
+              return (
+                <tr key={row.label} className={`${rowCls} transition-colors hover:bg-secondary/60`}>
+                  <td className={`p-4 font-semibold text-xs uppercase tracking-wider sticky left-0 z-10 ${labelCls}`}>
+                    {row.label}
                   </td>
-                ))}
-              </tr>
-            ))}
+                  {keys.map((key, ki) => (
+                    <td
+                      key={key}
+                      className={`p-4 text-right ${row.emphasis ? 'text-base' : ''} ${row.highlight ? `border-y-2 border-[hsl(var(--warning))] ${ki === keys.length - 1 ? 'border-r-2' : ''}` : ''} ${key === bestKey ? 'text-[hsl(var(--neon-green))]' : key === worstKey ? 'text-destructive' : 'text-foreground'}`}
+                    >
+                      {row.render(scenarios[key], key)}
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
