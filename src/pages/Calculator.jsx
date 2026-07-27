@@ -19,6 +19,7 @@ const DEFAULT_VALUES = {
   inntekt: 50000,
   verditap: 15,
   driftskostnader: 30000,
+  kostnadsøkning: 5,
   leasingpris: 5500,
   renteJustering: 0,
 };
@@ -93,6 +94,7 @@ export default function Calculator() {
             skatt={values.skatt}
             verditap={values.verditap}
             driftskostnader={values.driftskostnader}
+            kostnadsøkning={values.kostnadsøkning}
             bestKey={result.bestKey}
           />
 

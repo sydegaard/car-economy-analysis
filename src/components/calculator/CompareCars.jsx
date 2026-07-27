@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Zap, ChevronDown } from "lucide-react";
+import { Zap, ChevronDown, X } from "lucide-react";
 import { formatKR, computeOwnership, FINANCING_OPTIONS } from "@/hooks/useCalculations";
 import { EV_MODELS, carMidPrice, parseRangeKm } from "@/data/evModels";
 
@@ -40,7 +40,7 @@ function CarHeader({ car, isBest }) {
   );
 }
 
-export default function CompareCars({ egenkapital, løpetid, skatt, verditap, driftskostnader, bestKey }) {
+export default function CompareCars({ egenkapital, løpetid, skatt, verditap, driftskostnader, kostnadsøkning, bestKey }) {
   const defaultFinancing =
     FINANCING_OPTIONS.find((o) => o.key === bestKey)?.key || FINANCING_OPTIONS[0].key;
 
@@ -63,6 +63,7 @@ export default function CompareCars({ egenkapital, løpetid, skatt, verditap, dr
           skatt,
           verditap,
           driftskostnader,
+          kostnadsøkning,
           rate: option.rate,
           fee: option.fee,
         })
@@ -140,27 +141,51 @@ export default function CompareCars({ egenkapital, løpetid, skatt, verditap, dr
             <label htmlFor="compare-a" className="text-xs font-semibold text-foreground uppercase tracking-wide">
               Bil A
             </label>
-            <input
-              id="compare-a"
-              list="ev-model-list"
-              value={nameA}
-              onChange={(e) => setNameA(e.target.value)}
-              placeholder="Søk etter modell…"
-              className={inputCls}
-            />
+            <div className="relative">
+              <input
+                id="compare-a"
+                list="ev-model-list"
+                value={nameA}
+                onChange={(e) => setNameA(e.target.value)}
+                placeholder="Søk etter modell…"
+                className={`${inputCls} pr-9`}
+              />
+              {nameA !== "" && (
+                <button
+                  type="button"
+                  onClick={() => setNameA("")}
+                  aria-label="Tøm felt"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
           </div>
           <div className="flex flex-col gap-2">
             <label htmlFor="compare-b" className="text-xs font-semibold text-foreground uppercase tracking-wide">
               Bil B
             </label>
-            <input
-              id="compare-b"
-              list="ev-model-list"
-              value={nameB}
-              onChange={(e) => setNameB(e.target.value)}
-              placeholder="Søk etter modell…"
-              className={inputCls}
-            />
+            <div className="relative">
+              <input
+                id="compare-b"
+                list="ev-model-list"
+                value={nameB}
+                onChange={(e) => setNameB(e.target.value)}
+                placeholder="Søk etter modell…"
+                className={`${inputCls} pr-9`}
+              />
+              {nameB !== "" && (
+                <button
+                  type="button"
+                  onClick={() => setNameB("")}
+                  aria-label="Tøm felt"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
           </div>
           <datalist id="ev-model-list">
             {EV_MODELS.map((m) => (

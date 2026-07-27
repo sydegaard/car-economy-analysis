@@ -11,7 +11,7 @@ const RATES = {
 };
 
 function calcMonthly(principal, annualRate, years) {
-  if (annualRate === 0 || principal === 0) return 0;
+  if (annualRate === 0 || principal === 0 || years <= 0) return 0;
   const r = annualRate / 100 / 12;
   const n = years * 12;
   const factor = Math.pow(1 + r, n);
@@ -19,7 +19,7 @@ function calcMonthly(principal, annualRate, years) {
 }
 
 function calcTotalInterest(principal, annualRate, years, monthly) {
-  if (annualRate === 0 || principal === 0) return 0;
+  if (annualRate === 0 || principal === 0 || years <= 0) return 0;
   return monthly * years * 12 - principal;
 }
 
@@ -39,14 +39,23 @@ export const FINANCING_OPTIONS = Object.entries(RATES)
   .filter(([, r]) => r.rate !== null)
   .map(([key, r]) => ({ key, label: r.label.replace(/^\d+\.\s*/, ''), rate: r.rate, fee: r.fee }));
 
+// Running costs that rise with the car's age. `annualBase` is the first-year cost;
+// each later year grows by `growthPct`. Sum = base·((1+g)^n − 1)/g  (= base·n when g=0).
+export function totalRunningCost(annualBase, years, growthPct) {
+  const g = (growthPct || 0) / 100;
+  if (years <= 0) return 0;
+  if (g === 0) return annualBase * years;
+  return annualBase * ((Math.pow(1 + g, years) - 1) / g);
+}
+
 // Reusable total-cost-of-ownership calculation for a single car/price. Same formulas
 // as the main scenario loop (annuity loan, after-tax interest, depreciation on the full
-// price, flat running costs). Used by useCalculations and by CompareCars.
-export function computeOwnership(price, { egenkapital, løpetid, skatt, verditap, driftskostnader, rate, fee = 0 }) {
+// price, running costs that escalate over time). Used by useCalculations and CompareCars.
+export function computeOwnership(price, { egenkapital, løpetid, skatt, verditap, driftskostnader, kostnadsøkning, rate, fee = 0 }) {
   const loanAmount = Math.max(0, price - egenkapital);
   const totalDepreciation = price * (1 - Math.pow(1 - verditap / 100, løpetid));
-  const monthlyDrift = driftskostnader / 12;
-  const totalDrift = driftskostnader * løpetid;
+  const totalDrift = totalRunningCost(driftskostnader, løpetid, kostnadsøkning);
+  const monthlyDrift = løpetid > 0 ? totalDrift / (løpetid * 12) : driftskostnader / 12;
   const monthly = calcMonthly(loanAmount, rate, løpetid);
   const totalInterest = calcTotalInterest(loanAmount, rate, løpetid, monthly);
   const interestAfterTax = totalInterest * (1 - skatt / 100);
@@ -56,7 +65,7 @@ export function computeOwnership(price, { egenkapital, løpetid, skatt, verditap
 }
 
 export default function useCalculations(inputs) {
-  const { bilPris, egenkapital, løpetid, avkastning, skatt, sparepenger, inntekt, verditap, driftskostnader, leasingpris, renteJustering } = inputs;
+  const { bilPris, egenkapital, løpetid, avkastning, skatt, sparepenger, inntekt, verditap, driftskostnader, kostnadsøkning, leasingpris, renteJustering } = inputs;
 
   return useMemo(() => {
     const loanAmount = Math.max(0, bilPris - egenkapital);
@@ -65,9 +74,9 @@ export default function useCalculations(inputs) {
     // not the loan amount (you lose value on the whole car regardless of financing).
     const totalDepreciation = bilPris * (1 - Math.pow(1 - verditap / 100, løpetid));
     // Running costs (fuel/charging, insurance, service, tolls) — equal across all
-    // scenarios since it's the same car; applies to leasing too.
-    const monthlyDrift = driftskostnader / 12;
-    const totalDrift = driftskostnader * løpetid;
+    // scenarios since it's the same car; applies to leasing too. Escalates with car age.
+    const totalDrift = totalRunningCost(driftskostnader, løpetid, kostnadsøkning);
+    const monthlyDrift = løpetid > 0 ? totalDrift / (løpetid * 12) : driftskostnader / 12;
 
     const scenarios = {};
     let minCost = Infinity;
@@ -226,5 +235,5 @@ export default function useCalculations(inputs) {
       conclusion,
       advice,
     };
-  }, [bilPris, egenkapital, løpetid, avkastning, skatt, sparepenger, inntekt, verditap, driftskostnader, leasingpris, renteJustering]);
+  }, [bilPris, egenkapital, løpetid, avkastning, skatt, sparepenger, inntekt, verditap, driftskostnader, kostnadsøkning, leasingpris, renteJustering]);
 }
