@@ -1,10 +1,9 @@
-import { useState } from "react";
-import { ChevronDown } from "lucide-react";
 import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from "recharts";
 import { formatKR } from "@/hooks/useCalculations";
+import CollapsibleSection from "./CollapsibleSection";
 
 // Theme-derived palette. Cyan/magenta/purple are the categorical series colours;
 // green/red are reserved status colours (best/worst). Multi-series lines also use
@@ -40,8 +39,6 @@ function ChartCard({ title, hint, children }) {
 }
 
 export default function CostCharts({ yearlySeries, wealthSeries, costSplit, scenarios, bestKey, worstKey, monthlyDrift, leasingpris }) {
-  const [open, setOpen] = useState(true);
-
   // Total cost per scenario (bars).
   const compareData = Object.entries(scenarios)
     .filter(([, s]) => s.totalCost != null)
@@ -64,22 +61,7 @@ export default function CostCharts({ yearlySeries, wealthSeries, costSplit, scen
   const money = (v, n) => [formatKR(v), n];
 
   return (
-    <section aria-labelledby="charts-heading" className="mt-10">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-        aria-controls="charts-body"
-        className="w-full flex items-center justify-between gap-3 mb-6 text-left group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-lg"
-      >
-        <h2 id="charts-heading" className="text-lg font-bold text-foreground tracking-tight group-hover:text-primary transition-colors">
-          Visuell oversikt
-        </h2>
-        <ChevronDown className={`w-5 h-5 text-muted-foreground shrink-0 transition-transform group-hover:text-primary ${open ? "rotate-180" : ""}`} />
-      </button>
-
-      {open && (
-      <div id="charts-body" className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <CollapsibleSection id="charts" title="Visuell oversikt" bodyClassName="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* 1. Cumulative cost over time */}
         <ChartCard title="Kostnadsutvikling over tid" hint="Kumulativ total kostnad per år — kontant vs. beste lån vs. leasing.">
           <ResponsiveContainer width="100%" height={260}>
@@ -155,8 +137,6 @@ export default function CostCharts({ yearlySeries, wealthSeries, costSplit, scen
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
-      </div>
-      )}
-    </section>
+    </CollapsibleSection>
   );
 }

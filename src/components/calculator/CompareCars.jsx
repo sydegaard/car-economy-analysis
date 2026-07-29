@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { Zap, ChevronDown, X } from "lucide-react";
+import { Zap, Check, X } from "lucide-react";
 import { formatKR, computeOwnership, totalRunningCost, FINANCING_OPTIONS } from "@/hooks/useCalculations";
 import { EV_MODELS, carMidPrice, parseRangeKm } from "@/data/evModels";
+import CollapsibleSection from "./CollapsibleSection";
 
 const PLACEHOLDER_IMAGE = "/car-placeholder.svg";
 
@@ -10,29 +11,54 @@ function findModel(name) {
   return EV_MODELS.find((m) => m.name.toLowerCase() === n) || null;
 }
 
-function CarHeader({ car, isBest }) {
-  if (!car) return <span className="text-muted-foreground italic text-sm">Ingen bil valgt</span>;
+// `isBest` = cheaper of the two cars (neon-green, an outcome of the comparison).
+// `isSelected` = the car driving the rest of the analysis (primary/cyan, a user choice).
+// Two different things, so they get two clearly different colours.
+function CarHeader({ car, isBest, isSelected, onSelect }) {
+  if (!car) return <span className="text-muted-foreground italic text-sm">Ingen modell funnet</span>;
   return (
     <div className="flex flex-col items-center gap-2">
       <img
         src={car.image}
         alt={car.name}
         loading="lazy"
-        className="w-full h-24 object-cover rounded-lg"
+        className={`w-full h-24 object-cover rounded-lg ${isSelected ? "ring-2 ring-primary" : ""}`}
         onError={(e) => {
           if (e.currentTarget.dataset.fallback) return;
           e.currentTarget.dataset.fallback = "1";
           e.currentTarget.src = PLACEHOLDER_IMAGE;
         }}
       />
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap justify-center">
         <span className="font-bold text-sm text-foreground text-center">{car.name}</span>
         {isBest && (
           <span className="inline-block px-2 py-0.5 rounded-full bg-[hsl(var(--neon-green))]/15 text-[hsl(var(--neon-green))] text-[10px] font-bold uppercase tracking-wider">
             Best
           </span>
         )}
+        {isSelected && (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/15 text-primary text-[10px] font-bold uppercase tracking-wider">
+            <Check className="w-3 h-3" /> Valgt
+          </span>
+        )}
       </div>
+      {isSelected ? (
+        <button
+          type="button"
+          onClick={() => onSelect(null)}
+          className="text-xs font-semibold text-muted-foreground hover:text-foreground underline underline-offset-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded"
+        >
+          Fjern valg
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => onSelect(car)}
+          className="px-3 py-1.5 rounded-md bg-primary/10 border border-primary/40 text-xs font-bold uppercase tracking-wider text-primary hover:bg-primary hover:text-primary-foreground hover:border-primary transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+        >
+          Bruk denne bilen
+        </button>
+      )}
     </div>
   );
 }
@@ -89,10 +115,9 @@ function SearchField({ id, label, name, setName, form, setForm }) {
   );
 }
 
-export default function CompareCars({ egenkapital, løpetid, skatt, verditap, driftskostnader, kostnadsøkning, leasingpris, innskudd, bestKey }) {
+export default function CompareCars({ egenkapital, løpetid, skatt, verditap, driftskostnader, kostnadsøkning, leasingpris, innskudd, bestKey, selectedCarName, onSelectCar }) {
   const defaultFinancing = FINANCING_OPTIONS.find((o) => o.key === bestKey)?.key || FINANCING_OPTIONS[0].key;
 
-  const [open, setOpen] = useState(true);
   const [financingKey, setFinancingKey] = useState(defaultFinancing);
   const [nameA, setNameA] = useState(EV_MODELS[0].name);
   const [nameB, setNameB] = useState(EV_MODELS[1].name);
@@ -158,22 +183,12 @@ export default function CompareCars({ egenkapital, løpetid, skatt, verditap, dr
   ];
 
   return (
-    <section aria-labelledby="compare-heading" className="mt-10">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-        aria-controls="compare-body"
-        className="w-full flex items-center justify-between gap-3 mb-6 text-left group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-lg"
-      >
-        <h2 id="compare-heading" className="text-lg font-bold text-foreground tracking-tight group-hover:text-primary transition-colors">
-          Sammenlign to elbiler
-        </h2>
-        <ChevronDown className={`w-5 h-5 text-muted-foreground shrink-0 transition-transform group-hover:text-primary ${open ? "rotate-180" : ""}`} />
-      </button>
-
-      {open && (
-      <div id="compare-body" className="bg-card rounded-2xl border border-border/50 p-6 md:p-8">
+    <CollapsibleSection
+      id="compare"
+      title="Sammenlign to elbiler"
+      subtitle="Velg én av bilene for å bruke prisen videre i hele analysen — eller fjern valget og skriv inn dine egne tall under «Dine tall». Sammenligningen bruker forutsetningene (løpetid, verditap, drift, leasingpris) du setter der."
+      bodyClassName="bg-card rounded-2xl border border-border/50 p-6 md:p-8"
+    >
         {/* Controls */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
           <SearchField id="compare-a" label="Bil A" name={nameA} setName={setNameA} form={formA} setForm={setFormA} />
@@ -199,8 +214,12 @@ export default function CompareCars({ egenkapital, løpetid, skatt, verditap, dr
                 <th scope="col" className="text-left p-4 font-semibold text-foreground text-xs uppercase tracking-widest min-w-[150px]">
                   <span className="flex items-center gap-1.5"><Zap className="w-3.5 h-3.5 text-primary" /> Nøkkeltall</span>
                 </th>
-                <th scope="col" className="p-4 align-top w-1/2"><CarHeader car={A?.car} isBest={bestSide === "A"} /></th>
-                <th scope="col" className="p-4 align-top w-1/2"><CarHeader car={B?.car} isBest={bestSide === "B"} /></th>
+                <th scope="col" className="p-4 align-top w-1/2">
+                  <CarHeader car={A?.car} isBest={bestSide === "A"} isSelected={!!A && A.car.name === selectedCarName} onSelect={onSelectCar} />
+                </th>
+                <th scope="col" className="p-4 align-top w-1/2">
+                  <CarHeader car={B?.car} isBest={bestSide === "B"} isSelected={!!B && B.car.name === selectedCarName} onSelect={onSelectCar} />
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -240,8 +259,6 @@ export default function CompareCars({ egenkapital, løpetid, skatt, verditap, dr
         {bestSide && diff === 0 && (
           <p className="mt-4 text-sm text-muted-foreground">Begge alternativene har samme totale kostnad over perioden.</p>
         )}
-      </div>
-      )}
-    </section>
+    </CollapsibleSection>
   );
 }

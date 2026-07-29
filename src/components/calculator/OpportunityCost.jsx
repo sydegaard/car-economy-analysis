@@ -1,4 +1,5 @@
 import { formatKR } from "@/hooks/useCalculations";
+import CollapsibleSection from "./CollapsibleSection";
 
 function StatCard({ label, value, variant = 'default' }) {
   const colorClass =
@@ -28,10 +29,7 @@ export default function OpportunityCost({ data, løpetid }) {
   const percentVariant = monthlyPercent > 15 ? 'danger' : monthlyPercent > 10 ? 'warning' : 'success';
 
   return (
-    <section aria-labelledby="opportunity-heading" className="mt-10">
-      <h2 id="opportunity-heading" className="text-lg font-bold text-foreground mb-6 tracking-tight">
-        Alternativkostnad ved kontantbetaling
-      </h2>
+    <CollapsibleSection id="opportunity" title="Alternativkostnad ved kontantbetaling">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Tapt avkastning per år" value={formatKR(lostPerYear)} />
         <StatCard label={`Tapt avkastning over ${løpetid} år`} value={formatKR(lostTotal)} />
@@ -77,6 +75,6 @@ export default function OpportunityCost({ data, løpetid }) {
         lineær beregning ({formatKR(lostTotalLinear)}) fordi avkastningen reinvesteres.
         Nedbetaling av boliglån er en «risikofri» sammenligning lik boliglånsrenten.
       </p>
-    </section>
+    </CollapsibleSection>
   );
 }

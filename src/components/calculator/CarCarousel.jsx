@@ -25,15 +25,16 @@ function getMatchingCars(price) {
   return matches;
 }
 
-export default function CarCarousel({ bilPris }) {
+export default function CarCarousel({ bilPris, selectedCar }) {
   const [cars, setCars] = useState([]);
   const [index, setIndex] = useState(0);
 
+  // With an explicitly selected car, show that car only — budget-matched suggestions
+  // would otherwise contradict the choice the user just made in the comparison.
   useEffect(() => {
-    const matched = getMatchingCars(bilPris);
-    setCars(matched);
+    setCars(selectedCar ? [selectedCar] : getMatchingCars(bilPris));
     setIndex(0);
-  }, [bilPris]);
+  }, [bilPris, selectedCar]);
 
   if (cars.length === 0) return null;
 

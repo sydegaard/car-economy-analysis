@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from "react";
-import { X, HelpCircle } from "lucide-react";
+import { X, HelpCircle, Lock } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 
-export default function InputField({ id, label, hint, value, onChange, optional = false, help, onMoreInfo, ...props }) {
+export default function InputField({ id, label, hint, value, onChange, optional = false, help, onMoreInfo, locked = false, lockedNote, onUnlock, ...props }) {
   const [raw, setRaw] = useState(String(value));
   const inputRef = useRef(null);
 
@@ -15,6 +15,13 @@ export default function InputField({ id, label, hint, value, onChange, optional 
       setRaw(String(value));
     }
   }, [value]);
+
+  // When the lock is released, seed the editable field from the current value.
+  // Needed because the sync above skips a cleared field, so an emptied input
+  // would otherwise reappear blank while the value was the selected car's price.
+  useEffect(() => {
+    if (!locked) setRaw(String(value));
+  }, [locked]);
 
   const handleChange = (e) => {
     const str = e.target.value;
@@ -92,17 +99,23 @@ export default function InputField({ id, label, hint, value, onChange, optional 
           ref={inputRef}
           id={id}
           type="number"
-          value={raw}
+          // Locked: read `value` straight from the parent. The raw-sync effect above
+          // skips a cleared field, so using `raw` here could show a stale blank.
+          value={locked ? String(value) : raw}
           onChange={handleChange}
           onBlur={handleBlur}
+          readOnly={locked}
           placeholder="0"
-          className="no-spinner bg-secondary border-border text-foreground font-mono text-base h-12 pr-9
+          className={`no-spinner bg-secondary border-border text-foreground font-mono text-base h-12 pr-9
             focus:border-primary focus:ring-2 focus:ring-primary/30
-            placeholder:text-muted-foreground transition-all duration-200"
-          aria-describedby={hint ? `${id}-hint` : undefined}
+            placeholder:text-muted-foreground transition-all duration-200
+            ${locked ? "border-primary/40 bg-secondary/40 cursor-not-allowed" : ""}`}
+          aria-describedby={hint || lockedNote ? `${id}-hint` : undefined}
           {...props}
         />
-        {raw !== "" && (
+        {locked ? (
+          <Lock className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-primary/70 pointer-events-none" />
+        ) : raw !== "" && (
           <button
             type="button"
             onClick={handleClear}
@@ -113,7 +126,23 @@ export default function InputField({ id, label, hint, value, onChange, optional 
           </button>
         )}
       </div>
-      {hint && (
+      {locked && lockedNote ? (
+        <p id={`${id}-hint`} className="text-xs text-muted-foreground leading-relaxed">
+          {lockedNote}
+          {onUnlock && (
+            <>
+              {" · "}
+              <button
+                type="button"
+                onClick={onUnlock}
+                className="font-semibold text-primary hover:text-primary/80 underline underline-offset-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded"
+              >
+                Fjern valg
+              </button>
+            </>
+          )}
+        </p>
+      ) : hint && (
         <p id={`${id}-hint`} className="text-xs text-muted-foreground leading-relaxed">
           {hint}
         </p>

@@ -11,6 +11,7 @@ import CostCharts from "../components/calculator/CostCharts";
 import LeaseVsOwn from "../components/calculator/LeaseVsOwn";
 import RecommendationBox from "../components/calculator/RecommendationBox";
 import SensitivitySlider from "../components/calculator/SensitivitySlider";
+import { carMidPrice } from "@/data/evModels";
 
 const DEFAULT_VALUES = {
   bilPris: 350000,
@@ -31,9 +32,18 @@ const DEFAULT_VALUES = {
 
 export default function Calculator() {
   const [values, setValues] = useState(DEFAULT_VALUES);
+  // The EV model driving the analysis, or null when the user supplies their own numbers.
+  const [selectedCar, setSelectedCar] = useState(null);
 
   const handleChange = (field, value) => {
     setValues((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleSelectCar = (car) => {
+    setSelectedCar(car);
+    // Deselecting deliberately keeps the current price: snapping back to the default
+    // would make every figure below jump for no reason the user asked for.
+    if (car) setValues((prev) => ({ ...prev, bilPris: carMidPrice(car) }));
   };
 
   const result = useCalculations(values);
@@ -66,15 +76,35 @@ export default function Calculator() {
             </div>
             {/* EV Car Carousel */}
             <div className="w-full md:w-72 lg:w-80 h-48 md:h-52 flex-shrink-0">
-              <CarCarousel bilPris={values.bilPris} />
+              <CarCarousel bilPris={values.bilPris} selectedCar={selectedCar} />
             </div>
           </div>
         </header>
 
         {/* Main content */}
         <main>
-          <div className="bg-card rounded-2xl border border-border/50 p-6 md:p-8">
-            <InputSection values={values} onChange={handleChange} />
+          {/* Pick a car first — the chosen model sets the purchase price for everything below. */}
+          <CompareCars
+            egenkapital={values.egenkapital}
+            løpetid={values.løpetid}
+            skatt={values.skatt}
+            verditap={values.verditap}
+            driftskostnader={values.driftskostnader}
+            kostnadsøkning={values.kostnadsøkning}
+            leasingpris={values.leasingpris}
+            innskudd={values.innskudd}
+            bestKey={result.bestKey}
+            selectedCarName={selectedCar?.name ?? null}
+            onSelectCar={handleSelectCar}
+          />
+
+          <div className="mt-10 bg-card rounded-2xl border border-border/50 p-6 md:p-8">
+            <InputSection
+              values={values}
+              onChange={handleChange}
+              selectedCar={selectedCar}
+              onClearCar={() => handleSelectCar(null)}
+            />
           </div>
 
           <SensitivitySlider
@@ -103,18 +133,6 @@ export default function Calculator() {
           />
 
           <OpportunityCost data={result.opportunityCost} løpetid={values.løpetid} />
-
-          <CompareCars
-            egenkapital={values.egenkapital}
-            løpetid={values.løpetid}
-            skatt={values.skatt}
-            verditap={values.verditap}
-            driftskostnader={values.driftskostnader}
-            kostnadsøkning={values.kostnadsøkning}
-            leasingpris={values.leasingpris}
-            innskudd={values.innskudd}
-            bestKey={result.bestKey}
-          />
 
           <LeaseVsOwn
             bilPris={values.bilPris}

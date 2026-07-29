@@ -6,6 +6,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { HelpCircle, X } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { formatKR } from "@/hooks/useCalculations";
 
 const fields = [
   { id: 'bilPris', label: 'Bilens pris', hint: 'Total kjøpesum inkl. mva', step: 10000 },
@@ -124,14 +125,19 @@ function MarginalskattField({ value, onChange }) {
   );
 }
 
-export default function InputSection({ values, onChange }) {
+export default function InputSection({ values, onChange, selectedCar, onClearCar }) {
   const [avkastningModalOpen, setAvkastningModalOpen] = useState(false);
 
   return (
     <section aria-labelledby="input-heading">
-      <h2 id="input-heading" className="text-lg font-bold text-foreground mb-6 tracking-tight">
+      <h2 id="input-heading" className="text-lg font-bold text-foreground mb-2 tracking-tight">
         Dine tall
       </h2>
+      <p className="text-xs text-muted-foreground leading-relaxed mb-6 max-w-2xl">
+        {selectedCar
+          ? `Kjøpesummen er hentet fra ${selectedCar.name} i sammenligningen over. Fjern bilvalget for å skrive inn en egen pris.`
+          : 'Ingen bil er valgt — alle tallene er dine egne. Du kan også velge en bil i sammenligningen over for å fylle inn kjøpesummen automatisk.'}
+      </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
         {fields.map((f) => (
           <InputField
@@ -147,6 +153,15 @@ export default function InputSection({ values, onChange }) {
             optional={f.optional}
             help={f.help}
             onMoreInfo={f.id === 'avkastning' ? () => setAvkastningModalOpen(true) : undefined}
+            // Only the purchase price can come from a selected car — EV_MODELS has no
+            // per-model depreciation, running costs or lease price.
+            locked={f.id === 'bilPris' && !!selectedCar}
+            lockedNote={
+              f.id === 'bilPris' && selectedCar
+                ? `Fra valgt bil: ${selectedCar.name} (${formatKR(selectedCar.minPrice)} – ${formatKR(selectedCar.maxPrice)})`
+                : undefined
+            }
+            onUnlock={f.id === 'bilPris' ? onClearCar : undefined}
           />
         ))}
         <MarginalskattField value={values.skatt} onChange={(val) => onChange('skatt', val)} />
