@@ -22,7 +22,7 @@ function StatCard({ label, value, variant = 'default' }) {
 const bandVariant = { 3: 'danger', 5: 'default', 7: 'success' };
 
 export default function OpportunityCost({ data, løpetid }) {
-  const { lostPerYear, lostTotal, lostTotalCompound, bufferAfterPurchase, monthlyPercent, returnBands, equityAlternatives } = data;
+  const { lostPerYear, lostTotal, lostTotalLinear, lostTotalCompound, bufferAfterPurchase, monthlyPercent, returnBands, equityAlternatives } = data;
 
   const bufferVariant = bufferAfterPurchase < 50000 ? 'danger' : 'success';
   const percentVariant = monthlyPercent > 15 ? 'danger' : monthlyPercent > 10 ? 'warning' : 'success';
@@ -35,8 +35,8 @@ export default function OpportunityCost({ data, løpetid }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Tapt avkastning per år" value={formatKR(lostPerYear)} />
         <StatCard label={`Tapt avkastning over ${løpetid} år`} value={formatKR(lostTotal)} />
-        <StatCard label="Buffer etter kjøp" value={formatKR(bufferAfterPurchase)} variant={bufferVariant} />
-        <StatCard label="Månedskostnad i % av inntekt" value={`${monthlyPercent.toFixed(1)}%`} variant={percentVariant} />
+        <StatCard label="Buffer hvis du betaler kontant" value={formatKR(bufferAfterPurchase)} variant={bufferVariant} />
+        <StatCard label="Lånekostnad i % av inntekt" value={`${monthlyPercent.toFixed(1)}%`} variant={percentVariant} />
       </div>
 
       <h3 className="text-sm font-bold text-foreground/80 uppercase tracking-widest mt-8 mb-4">
@@ -71,9 +71,10 @@ export default function OpportunityCost({ data, løpetid }) {
         ))}
       </div>
       <p className="text-xs text-muted-foreground leading-relaxed mt-3">
-        I stedet for å binde egenkapitalen i bilen kunne den vokst. Med rentes-rente på forventet
-        avkastning ville tapt gevinst vært <span className="font-mono text-foreground">{formatKR(lostTotalCompound)}</span>
-        {" "}— høyere enn den enkle lineære modellen ({formatKR(lostTotal)}) fordi avkastning reinvesteres.
+        Tallene over viser hva egenkapitalen alene kunne vokst til (brutto). I selve valget lån vs. kontant
+        er det den frigjorte kapitalen som teller: med rentes-rente og etter skatt blir tapt gevinst
+        {" "}<span className="font-mono text-foreground">{formatKR(lostTotalCompound)}</span> — høyere enn en enkel
+        lineær beregning ({formatKR(lostTotalLinear)}) fordi avkastningen reinvesteres.
         Nedbetaling av boliglån er en «risikofri» sammenligning lik boliglånsrenten.
       </p>
     </section>

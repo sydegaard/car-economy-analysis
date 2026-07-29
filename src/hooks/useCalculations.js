@@ -85,19 +85,37 @@ function remainingBalance(principal, annualRate, years, monthsPaid) {
   return principal * (Math.pow(1 + i, n) - Math.pow(1 + i, m)) / (Math.pow(1 + i, n) - 1);
 }
 
+// Months needed to repay an annuity loan at a fixed monthly `payment`. Returns Infinity
+// if the payment doesn't even cover the first month's interest (loan never amortises).
+function monthsToPayoff(principal, annualRate, payment) {
+  if (principal <= 0 || payment <= 0) return 0;
+  const i = annualRate / 100 / 12;
+  if (i === 0) return principal / payment;
+  if (payment <= principal * i) return Infinity;
+  return -Math.log(1 - (i * principal) / payment) / Math.log(1 + i);
+}
+
 const BSU_RATE = 3.5; // risk-free savings / BSU assumption (%)
 
 // Leasing vs. owning over a long horizon, incl. residual value. Pure so the UI can pass
 // an adjustable horizon without recomputing the whole hook. `rate` = the chosen loan rate.
-export function compareLeaseVsOwn({ bilPris, egenkapital, løpetid, skatt, verditap, driftskostnader, kostnadsøkning, leasingpris, innskudd = 0, rate, horisont, kjørelengde }) {
+export function compareLeaseVsOwn({ bilPris, egenkapital, løpetid, skatt, verditap, driftskostnader, kostnadsøkning, leasingpris, innskudd = 0, rate, fee = 0, avkastning = 0, horisont, kjørelengde }) {
   const loanAmount = Math.max(0, bilPris - egenkapital);
   const monthly = calcMonthly(loanAmount, rate, løpetid);
   const interestAfterTax = calcTotalInterest(loanAmount, rate, løpetid, monthly) * (1 - skatt / 100);
   const residual = residualValue(bilPris, verditap, horisont);
   const ownDrift = totalRunningCost(driftskostnader, horisont, kostnadsøkning);
   const leaseDrift = ownDrift; // same car usage either way
-  const ownNet = interestAfterTax + (bilPris - residual) + ownDrift; // you still own `residual` at the end
-  const leaseNet = innskudd + leasingpris * 12 * horisont + leaseDrift; // startleie upfront; own nothing at the end
+  // Opportunity cost of the up-front capital each option ties up: the owner sinks
+  // `egenkapital` (down payment) into the car, the leaser only the startleie (`innskudd`).
+  // Include the after-tax return that capital could otherwise have earned, so lease-vs-eie
+  // rests on the same tied-up-capital basis as the rest of the tool. Also add the loan's
+  // establishment fee, which the owning side previously ignored.
+  const investAfterTaxRate = avkastning * (1 - skatt / 100);
+  const ownOppCost = compound(egenkapital, investAfterTaxRate, horisont);
+  const leaseOppCost = compound(innskudd, investAfterTaxRate, horisont);
+  const ownNet = interestAfterTax + fee + (bilPris - residual) + ownDrift + ownOppCost; // you still own `residual` at the end
+  const leaseNet = innskudd + leasingpris * 12 * horisont + leaseDrift + leaseOppCost; // startleie upfront; own nothing at the end
 
   const series = [];
   for (let y = 1; y <= horisont; y++) {
@@ -106,16 +124,16 @@ export function compareLeaseVsOwn({ bilPris, egenkapital, løpetid, skatt, verdi
     const intY = løpetid > 0 ? interestAfterTax * Math.min(1, y / løpetid) : interestAfterTax;
     series.push({
       år: y,
-      eie: Math.round(intY + (bilPris - resY) + driftY),
-      leasing: Math.round(innskudd + leasingpris * 12 * y + driftY),
+      eie: Math.round(intY + fee + (bilPris - resY) + driftY + compound(egenkapital, investAfterTaxRate, y)),
+      leasing: Math.round(innskudd + leasingpris * 12 * y + driftY + compound(innskudd, investAfterTaxRate, y)),
     });
   }
 
   return {
     horisont,
     residual,
-    own: { net: ownNet, interestAfterTax, depreciation: bilPris - residual, drift: ownDrift },
-    lease: { net: leaseNet, drift: leaseDrift },
+    own: { net: ownNet, interestAfterTax, depreciation: bilPris - residual, drift: ownDrift, oppCost: ownOppCost, fee },
+    lease: { net: leaseNet, drift: leaseDrift, oppCost: leaseOppCost },
     diff: leaseNet - ownNet, // positive → owning is cheaper net over the horizon
     kmWarning: kjørelengde > 15000,
     kjørelengde,
@@ -181,24 +199,35 @@ export default function useCalculations(inputs) {
       }
     });
 
-    // Opportunity cost
-    const lostPerYear = egenkapital * (avkastning / 100);
-    const lostTotal = lostPerYear * løpetid;
-    // Risk bands: what the tied-up equity would earn under pessimistic / moderate /
-    // optimistic return assumptions (linear, matching the base opportunity-cost model).
+    // Opportunity cost of paying cash instead of taking the cheapest loan. The capital a
+    // loan keeps invested (rather than sunk into the car) is exactly loanAmount — the same
+    // base the loan charges interest on — so the two are directly comparable. Investment
+    // gains are taxed like the loan-interest deduction, so use an AFTER-TAX return rate on
+    // both sides (symmetric tax treatment).
+    const investAfterTaxRate = avkastning * (1 - skatt / 100);
+    const lostPerYear = loanAmount * (investAfterTaxRate / 100);
+    const lostTotalLinear = lostPerYear * løpetid;
+    // Detailed opportunity cost with compound (rentes-rente) growth — the figure the
+    // decision below uses. `lostTotalLinear` is kept only for the linear-vs-compound
+    // illustration in the UI.
+    const lostTotalCompound = compound(loanAmount, investAfterTaxRate, løpetid);
+    const lostTotal = lostTotalCompound;
+    // Risk bands: after-tax compound return the freed-up capital would earn under
+    // pessimistic / moderate / optimistic assumptions (same basis as the base figure).
+    const bandGain = (pct) => compound(loanAmount, pct * (1 - skatt / 100), løpetid);
     const returnBands = [
-      { pct: 3, label: 'Pessimistisk', lostTotal: egenkapital * 0.03 * løpetid },
-      { pct: 5, label: 'Moderat', lostTotal: egenkapital * 0.05 * løpetid },
-      { pct: 7, label: 'Optimistisk', lostTotal: egenkapital * 0.07 * løpetid },
+      { pct: 3, label: 'Pessimistisk', lostTotal: bandGain(3) },
+      { pct: 5, label: 'Moderat', lostTotal: bandGain(5) },
+      { pct: 7, label: 'Optimistisk', lostTotal: bandGain(7) },
     ];
-    const bufferAfterPurchase = sparepenger - bilPris;
+    // Two liquidity pictures: paying cash empties `bilPris` from savings, while financing
+    // only spends the down payment (`egenkapital`). The old single figure assumed cash even
+    // when a loan was recommended.
+    const bufferAfterPurchase = sparepenger - bilPris; // cash purchase
+    const bufferAfterLoan = sparepenger - egenkapital; // financed: only the down payment leaves the account
     const monthlyPercent = inntekt > 0 && scenarios.billån1?.monthly
       ? (scenarios.billån1.monthly / inntekt) * 100
       : 0;
-
-    // Detailed opportunity cost: compound (rentes-rente) growth of the tied-up equity
-    // under different uses, vs. today's simple linear figure (`lostTotal`).
-    const lostTotalCompound = compound(egenkapital, avkastning, løpetid);
     const equityAlternatives = [
       { key: 'fond', label: `Indeksfond (${avkastning} %)`, rate: avkastning, gain: compound(egenkapital, avkastning, løpetid) },
       { key: 'bsu', label: `BSU/sparekonto (${BSU_RATE} %)`, rate: BSU_RATE, gain: compound(egenkapital, BSU_RATE, løpetid) },
@@ -220,13 +249,21 @@ export default function useCalculations(inputs) {
         år: y,
         kontant: Math.round(depCum + driftCum),
         lån: Math.round(depCum + driftCum + loanExtra),
-        leasing: Math.round(leasingpris * 12 * y + driftCum),
+        leasing: Math.round((innskudd || 0) + leasingpris * 12 * y + driftCum),
       });
 
       const resY = bilPris * Math.pow(1 - verditap / 100, y);
       const cashWealth = (sparepenger - bilPris) * Math.pow(growth, y) + resY;
+      // Loan wealth = leftover savings grown + car residual − remaining debt − the
+      // interest and establishment fee actually paid so far (after tax). Omitting the
+      // interest made the loan scenario look artificially better than paying cash.
+      const months = y * 12;
+      const bal = remainingBalance(loanAmount, bestLoan ? bestLoan.rate : 0, løpetid, months);
+      const monthsPaid = Math.min(months, løpetid * 12);
+      const paymentsMade = bestLoan ? bestLoan.monthly * monthsPaid : 0;
+      const interestPaidAfterTax = Math.max(0, paymentsMade - (loanAmount - bal)) * (1 - skatt / 100);
       const loanWealth = (sparepenger - egenkapital) * Math.pow(growth, y) + resY
-        - remainingBalance(loanAmount, bestLoan ? bestLoan.rate : 0, løpetid, y * 12);
+        - bal - interestPaidAfterTax - (bestLoan ? bestLoan.fee : 0);
       wealthSeries.push({ år: y, kontant: Math.round(cashWealth), lån: Math.round(loanWealth) });
     }
 
@@ -238,19 +275,30 @@ export default function useCalculations(inputs) {
 
     // Conclusion
     let conclusion = { type: '', title: '', detail: '' };
-    const cheapestLoan = minCost;
+    const cheapestLoan = minCost; // after-tax interest + establishment fee of the cheapest loan
+    // Net advantage of financing: the after-tax return the freed-up capital would earn
+    // (lostTotal, on loanAmount) minus what the cheapest loan costs. Both sides are now on
+    // the same base and both after-tax, so the comparison is apples-to-apples.
+    const loanNetAdvantage = lostTotal - cheapestLoan; // > 0 → loaning pays off
+    const smallDiff = cheapestLoan > 0 && Math.abs(loanNetAdvantage) < 0.15 * cheapestLoan;
 
-    if (lostTotal < cheapestLoan) {
+    if (loanAmount <= 0) {
+      conclusion = {
+        type: 'cash',
+        title: 'INGEN LÅN NØDVENDIG',
+        detail: `Egenkapitalen dekker hele kjøpet, så du slipper rentekostnader. Vurder likevel om du heller vil beholde noe av sparingen investert framfor å binde alt i bilen.`,
+      };
+    } else if (loanNetAdvantage < 0 && !smallDiff) {
       conclusion = {
         type: 'cash',
         title: 'BETAL KONTANT — billigst totalt',
-        detail: `Tapt avkastning (${formatKR(lostTotal)}) er lavere enn rentekostnaden på selv det billigste lånet (${formatKR(cheapestLoan)}). Du sparer penger på å betale bilen kontant.`,
+        detail: `Forventet avkastning etter skatt på den frigjorte kapitalen (${formatKR(lostTotal)}) er lavere enn rentekostnaden på selv det billigste lånet (${formatKR(cheapestLoan)}). Du sparer penger på å betale bilen kontant.`,
       };
-    } else if (avkastning > scenarios.billån1.rate && scenarios.billån1.interestAfterTax < lostTotal) {
+    } else if (loanNetAdvantage > 0 && !smallDiff) {
       conclusion = {
         type: 'loan',
         title: 'TA OPP LÅN — Behold sparingen',
-        detail: `Forventet avkastning (${avkastning}%) er høyere enn billånsrenten (${scenarios.billån1.rate.toFixed(2)}%). Ved å låne kan du tjene ${formatKR(lostTotal - scenarios.billån1.interestAfterTax)} mer enn rentekostnaden.`,
+        detail: `Forventet avkastning etter skatt på den frigjorte kapitalen (${formatKR(lostTotal)}) er høyere enn rentekostnaden på det billigste lånet (${formatKR(cheapestLoan)}). Ved å låne kan du tjene ${formatKR(loanNetAdvantage)} mer enn lånet koster.`,
       };
     } else {
       conclusion = {
@@ -270,7 +318,7 @@ export default function useCalculations(inputs) {
     // on realised return. Show both ends of the band.
     const lowBand = returnBands[0].lostTotal;
     const highBand = returnBands[2].lostTotal;
-    if (cheapestLoan < Infinity && egenkapital > 0) {
+    if (cheapestLoan < Infinity && loanAmount > 0) {
       const lowPart = lowBand < cheapestLoan
         ? `Ved lav avkastning (3%) lønner det seg å betale kontant`
         : `Ved lav avkastning (3%) er lån fortsatt konkurransedyktig`;
@@ -286,21 +334,31 @@ export default function useCalculations(inputs) {
     }
 
     // Advice
+    // Nedbetaling: how much sooner an extra 2 000 kr/mnd repays the best loan — computed
+    // from the actual balance, rate and payment (not a fixed fraction of the term).
+    const extraMonthly = 2000;
+    const baseMonthly = bestLoan ? bestLoan.monthly : 0;
+    const monthsSaved = bestLoan && loanAmount > 0
+      ? Math.max(0, Math.round(løpetid * 12 - monthsToPayoff(loanAmount, bestLoan.rate, baseMonthly + extraMonthly)))
+      : 0;
+
     const advice = [
       {
         icon: '📊',
         title: 'Likviditet',
-        text: bufferAfterPurchase < 50000
-          ? 'ADVARSEL: Svært lav buffer etter kjøp! Vurder å låne 50–100k for å beholde sikkerhetsnett.'
-          : 'God buffer — du tåler uforutsette utgifter.',
-        type: bufferAfterPurchase < 50000 ? 'warning' : 'success',
+        text: bufferAfterLoan < 50000
+          ? `ADVARSEL: Svært lav buffer selv med lån (${formatKR(bufferAfterLoan)} igjen etter egenkapitalen). Vurder lavere egenkapital eller en rimeligere bil for å beholde et sikkerhetsnett.`
+          : bufferAfterPurchase < 50000
+            ? `Kontant tømmer bufferen (${formatKR(bufferAfterPurchase)} igjen). Lån heller 50–100k — med lån står du igjen med ${formatKR(bufferAfterLoan)}.`
+            : 'God buffer — du tåler uforutsette utgifter enten du betaler kontant eller låner.',
+        type: bufferAfterLoan < 50000 ? 'warning' : bufferAfterPurchase < 50000 ? 'info' : 'success',
       },
       {
         icon: '🏦',
         title: 'Lånevalg',
-        text: RATES.billån1.rate < 5.5
-          ? 'Billån fra Sparebanken Sør (5,19%) er best i test. Be om fast rente hvis du vil sikre deg.'
-          : 'Sjekk om du kan forhandle ned renten — be om tilbud fra 2–3 banker.',
+        text: bestLoan
+          ? `Billigste lån i utvalget er ${bestLoan.short} (${bestLoan.rate.toFixed(2)} %). Be om fast rente hvis du vil sikre deg, og hent tilbud fra 2–3 banker.`
+          : 'Med kontantkjøp slipper du rentekostnader helt — men vei det mot tapt avkastning på pengene.',
         type: 'info',
       },
       {
@@ -314,8 +372,10 @@ export default function useCalculations(inputs) {
       {
         icon: '📉',
         title: 'Nedbetaling',
-        text: scenarios.billån1?.monthly > 0
-          ? `Ved lån på ${formatKR(loanAmount)} over ${løpetid} år: Ekstrainnbetaling på 2 000 kr/mnd kan kutte nedbetalingstiden med ca. ${Math.round(løpetid * 0.3)} år.`
+        text: bestLoan && loanAmount > 0
+          ? (monthsSaved > 0
+              ? `Ved lån på ${formatKR(loanAmount)} over ${løpetid} år (${formatKR(baseMonthly)}/mnd): 2 000 kr/mnd ekstra betaler ned lånet ca. ${monthsSaved} mnd raskere (~${(monthsSaved / 12).toFixed(1)} år).`
+              : `Ved lån på ${formatKR(loanAmount)} over ${løpetid} år: ekstra nedbetaling frigjør deg fra renter tidligere — jo før, jo mindre rente totalt.`)
           : 'Uten lån? Flott! Da har du full kontroll.',
         type: 'info',
       },
@@ -323,9 +383,10 @@ export default function useCalculations(inputs) {
 
     // Context-based recommendation (simple decision tree over the user's inputs).
     const bestRate = bestLoan ? bestLoan.rate : RATES.billån1.rate;
+    const bestFee = bestLoan ? bestLoan.fee : RATES.billån1.fee;
     const lvo8 = compareLeaseVsOwn({
       bilPris, egenkapital, løpetid, skatt, verditap, driftskostnader, kostnadsøkning,
-      leasingpris, innskudd, rate: bestRate, horisont: 8, kjørelengde,
+      leasingpris, innskudd, rate: bestRate, fee: bestFee, avkastning, horisont: 8, kjørelengde,
     });
     const ownCheaper = lvo8.diff > 0;
     const recommendation = { type: '', headline: '', rationale: '', caveats: [] };
@@ -348,8 +409,9 @@ export default function useCalculations(inputs) {
       recommendation.rationale = `Å eie er ${formatKR(lvo8.diff)} billigere enn leasing over 8 år. Forskjellen mellom kontant og lån er liten, så en kombinasjon kan være fornuftig.`;
     }
 
-    // Caveats ("men vær oppmerksom på …")
-    if (bufferAfterPurchase < 50000) {
+    // Caveats ("men vær oppmerksom på …") — use the financed-scenario buffer, since a low
+    // buffer even after only paying the down payment is the real liquidity risk.
+    if (bufferAfterLoan < 50000) {
       recommendation.caveats.push('Lav likviditetsbuffer etter kjøp — behold nok til uforutsette utgifter (mål gjerne 2–3 månedslønner).');
     }
     if (kjørelengde > 15000) {
@@ -373,7 +435,7 @@ export default function useCalculations(inputs) {
       totalDepreciation,
       totalDrift,
       monthlyDrift,
-      opportunityCost: { lostPerYear, lostTotal, lostTotalCompound, bufferAfterPurchase, monthlyPercent, returnBands, equityAlternatives },
+      opportunityCost: { lostPerYear, lostTotal, lostTotalLinear, lostTotalCompound, bufferAfterPurchase, bufferAfterLoan, monthlyPercent, returnBands, equityAlternatives },
       yearlySeries,
       wealthSeries,
       costSplit,

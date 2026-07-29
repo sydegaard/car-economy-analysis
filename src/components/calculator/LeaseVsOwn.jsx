@@ -26,12 +26,12 @@ function Stat({ label, value, variant = "default", badge }) {
   );
 }
 
-export default function LeaseVsOwn({ bilPris, egenkapital, løpetid, skatt, verditap, driftskostnader, kostnadsøkning, leasingpris, innskudd, kjørelengde, rate, rateLabel }) {
+export default function LeaseVsOwn({ bilPris, egenkapital, løpetid, skatt, verditap, driftskostnader, kostnadsøkning, leasingpris, innskudd, kjørelengde, rate, fee, avkastning, rateLabel }) {
   const [horisont, setHorisont] = useState(8);
 
   const r = compareLeaseVsOwn({
     bilPris, egenkapital, løpetid, skatt, verditap, driftskostnader, kostnadsøkning, leasingpris, innskudd,
-    rate, horisont, kjørelengde,
+    rate, fee, avkastning, horisont, kjørelengde,
   });
 
   const ownCheaper = r.diff > 0; // owning cheaper net over the horizon

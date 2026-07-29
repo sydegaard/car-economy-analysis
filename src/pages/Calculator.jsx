@@ -128,6 +128,8 @@ export default function Calculator() {
             innskudd={values.innskudd}
             kjørelengde={values.kjørelengde}
             rate={(result.scenarios[result.bestKey] || result.scenarios.billån1).rate}
+            fee={(result.scenarios[result.bestKey] || result.scenarios.billån1).fee}
+            avkastning={values.avkastning}
             rateLabel={(result.scenarios[result.bestKey] || result.scenarios.billån1).short}
           />
 
