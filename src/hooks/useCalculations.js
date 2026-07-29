@@ -64,8 +64,66 @@ export function computeOwnership(price, { egenkapital, løpetid, skatt, verditap
   return { loanAmount, monthly, totalInterest, interestAfterTax, fee, totalDepreciation, totalDrift, monthlyTotal, totalCost };
 }
 
+// Compound (rentes-rente) GAIN on K over n years at ratePct: K·((1+r)^n − 1).
+export function compound(K, ratePct, years) {
+  if (years <= 0 || !K) return 0;
+  return K * (Math.pow(1 + ratePct / 100, years) - 1);
+}
+
+// Residual (rest-) value of a car after `years` given annual depreciation %.
+export function residualValue(price, verditapPct, years) {
+  return price * Math.pow(1 - verditapPct / 100, years);
+}
+
+// Remaining annuity-loan balance after `monthsPaid` months of an `years`-year loan.
+function remainingBalance(principal, annualRate, years, monthsPaid) {
+  if (principal <= 0 || years <= 0) return 0;
+  const n = years * 12;
+  const m = Math.min(Math.max(0, monthsPaid), n);
+  if (annualRate === 0) return principal * (1 - m / n);
+  const i = annualRate / 100 / 12;
+  return principal * (Math.pow(1 + i, n) - Math.pow(1 + i, m)) / (Math.pow(1 + i, n) - 1);
+}
+
+const BSU_RATE = 3.5; // risk-free savings / BSU assumption (%)
+
+// Leasing vs. owning over a long horizon, incl. residual value. Pure so the UI can pass
+// an adjustable horizon without recomputing the whole hook. `rate` = the chosen loan rate.
+export function compareLeaseVsOwn({ bilPris, egenkapital, løpetid, skatt, verditap, driftskostnader, kostnadsøkning, leasingpris, innskudd = 0, rate, horisont, kjørelengde }) {
+  const loanAmount = Math.max(0, bilPris - egenkapital);
+  const monthly = calcMonthly(loanAmount, rate, løpetid);
+  const interestAfterTax = calcTotalInterest(loanAmount, rate, løpetid, monthly) * (1 - skatt / 100);
+  const residual = residualValue(bilPris, verditap, horisont);
+  const ownDrift = totalRunningCost(driftskostnader, horisont, kostnadsøkning);
+  const leaseDrift = ownDrift; // same car usage either way
+  const ownNet = interestAfterTax + (bilPris - residual) + ownDrift; // you still own `residual` at the end
+  const leaseNet = innskudd + leasingpris * 12 * horisont + leaseDrift; // startleie upfront; own nothing at the end
+
+  const series = [];
+  for (let y = 1; y <= horisont; y++) {
+    const resY = residualValue(bilPris, verditap, y);
+    const driftY = totalRunningCost(driftskostnader, y, kostnadsøkning);
+    const intY = løpetid > 0 ? interestAfterTax * Math.min(1, y / løpetid) : interestAfterTax;
+    series.push({
+      år: y,
+      eie: Math.round(intY + (bilPris - resY) + driftY),
+      leasing: Math.round(innskudd + leasingpris * 12 * y + driftY),
+    });
+  }
+
+  return {
+    horisont,
+    residual,
+    own: { net: ownNet, interestAfterTax, depreciation: bilPris - residual, drift: ownDrift },
+    lease: { net: leaseNet, drift: leaseDrift },
+    diff: leaseNet - ownNet, // positive → owning is cheaper net over the horizon
+    kmWarning: kjørelengde > 15000,
+    kjørelengde,
+  };
+}
+
 export default function useCalculations(inputs) {
-  const { bilPris, egenkapital, løpetid, avkastning, skatt, sparepenger, inntekt, verditap, driftskostnader, kostnadsøkning, leasingpris, renteJustering } = inputs;
+  const { bilPris, egenkapital, løpetid, avkastning, skatt, sparepenger, inntekt, verditap, driftskostnader, kostnadsøkning, leasingpris, innskudd, renteJustering, kjørelengde } = inputs;
 
   return useMemo(() => {
     const loanAmount = Math.max(0, bilPris - egenkapital);
@@ -99,7 +157,7 @@ export default function useCalculations(inputs) {
           totalInterest: null,
           interestAfterTax: null,
           monthlyTotal: leasingpris + monthlyDrift,
-          totalCost: leasingpris * 12 * løpetid + totalDrift,
+          totalCost: (innskudd || 0) + leasingpris * 12 * løpetid + totalDrift,
         };
         return;
       }
@@ -137,6 +195,46 @@ export default function useCalculations(inputs) {
     const monthlyPercent = inntekt > 0 && scenarios.billån1?.monthly
       ? (scenarios.billån1.monthly / inntekt) * 100
       : 0;
+
+    // Detailed opportunity cost: compound (rentes-rente) growth of the tied-up equity
+    // under different uses, vs. today's simple linear figure (`lostTotal`).
+    const lostTotalCompound = compound(egenkapital, avkastning, løpetid);
+    const equityAlternatives = [
+      { key: 'fond', label: `Indeksfond (${avkastning} %)`, rate: avkastning, gain: compound(egenkapital, avkastning, løpetid) },
+      { key: 'bsu', label: `BSU/sparekonto (${BSU_RATE} %)`, rate: BSU_RATE, gain: compound(egenkapital, BSU_RATE, løpetid) },
+      { key: 'bolig', label: `Nedbetaling boliglån (${RATES.bolig.rate} %)`, rate: RATES.bolig.rate, gain: compound(egenkapital, RATES.bolig.rate, løpetid) },
+    ];
+
+    // Per-year data series for the charts (Phase 2). Interest is spread linearly for a
+    // smooth curve — good enough for a guiding visual.
+    const bestLoan = bestKey ? scenarios[bestKey] : null;
+    const perYearInterest = løpetid > 0 && bestLoan ? bestLoan.interestAfterTax / løpetid : 0;
+    const growth = 1 + avkastning / 100;
+    const yearlySeries = [];
+    const wealthSeries = [];
+    for (let y = 1; y <= Math.max(1, løpetid); y++) {
+      const depCum = bilPris * (1 - Math.pow(1 - verditap / 100, y));
+      const driftCum = totalRunningCost(driftskostnader, y, kostnadsøkning);
+      const loanExtra = bestLoan ? perYearInterest * y + bestLoan.fee : 0;
+      yearlySeries.push({
+        år: y,
+        kontant: Math.round(depCum + driftCum),
+        lån: Math.round(depCum + driftCum + loanExtra),
+        leasing: Math.round(leasingpris * 12 * y + driftCum),
+      });
+
+      const resY = bilPris * Math.pow(1 - verditap / 100, y);
+      const cashWealth = (sparepenger - bilPris) * Math.pow(growth, y) + resY;
+      const loanWealth = (sparepenger - egenkapital) * Math.pow(growth, y) + resY
+        - remainingBalance(loanAmount, bestLoan ? bestLoan.rate : 0, løpetid, y * 12);
+      wealthSeries.push({ år: y, kontant: Math.round(cashWealth), lån: Math.round(loanWealth) });
+    }
+
+    // Fixed vs. variable cost split (for the best loan scenario).
+    const costSplit = {
+      fast: Math.round(totalDepreciation + (bestLoan ? bestLoan.interestAfterTax + bestLoan.fee : 0)),
+      variabel: Math.round(totalDrift),
+    };
 
     // Conclusion
     let conclusion = { type: '', title: '', detail: '' };
@@ -223,17 +321,64 @@ export default function useCalculations(inputs) {
       },
     ];
 
+    // Context-based recommendation (simple decision tree over the user's inputs).
+    const bestRate = bestLoan ? bestLoan.rate : RATES.billån1.rate;
+    const lvo8 = compareLeaseVsOwn({
+      bilPris, egenkapital, løpetid, skatt, verditap, driftskostnader, kostnadsøkning,
+      leasingpris, innskudd, rate: bestRate, horisont: 8, kjørelengde,
+    });
+    const ownCheaper = lvo8.diff > 0;
+    const recommendation = { type: '', headline: '', rationale: '', caveats: [] };
+
+    if (!ownCheaper) {
+      recommendation.type = 'lease';
+      recommendation.headline = 'Leasing ser mest gunstig ut';
+      recommendation.rationale = `Over 8 år er leasing ${formatKR(Math.abs(lvo8.diff))} billigere enn å eie i dette regnestykket — men du eier ingenting til slutt.`;
+    } else if (conclusion.type === 'loan') {
+      recommendation.type = 'loan';
+      recommendation.headline = 'Kjøp bilen med lån — behold sparingen';
+      recommendation.rationale = `Å eie er ${formatKR(lvo8.diff)} billigere enn leasing over 8 år, og forventet avkastning (${avkastning} %) er høyere enn lånerenten (${bestRate.toFixed(2)} %), så det lønner seg å låne og la sparepengene stå.`;
+    } else if (conclusion.type === 'cash') {
+      recommendation.type = 'cash';
+      recommendation.headline = 'Kjøp bilen — helst med mye egenkapital';
+      recommendation.rationale = `Å eie er ${formatKR(lvo8.diff)} billigere enn leasing over 8 år, og tapt avkastning er lavere enn lånekostnaden — da lønner det seg å betale mest mulig kontant.`;
+    } else {
+      recommendation.type = 'mixed';
+      recommendation.headline = 'Kjøp bilen — vurder delvis finansiering';
+      recommendation.rationale = `Å eie er ${formatKR(lvo8.diff)} billigere enn leasing over 8 år. Forskjellen mellom kontant og lån er liten, så en kombinasjon kan være fornuftig.`;
+    }
+
+    // Caveats ("men vær oppmerksom på …")
+    if (bufferAfterPurchase < 50000) {
+      recommendation.caveats.push('Lav likviditetsbuffer etter kjøp — behold nok til uforutsette utgifter (mål gjerne 2–3 månedslønner).');
+    }
+    if (kjørelengde > 15000) {
+      recommendation.caveats.push(`Kjørelengden din (${(kjørelengde || 0).toLocaleString('nb-NO')} km/år) overstiger typisk leasing km-tak (~15 000 km) — leasing kan bli dyrere pga. overkjørte km.`);
+    }
+    if (monthlyPercent > 15) {
+      recommendation.caveats.push(`Lånets månedskostnad er ~${monthlyPercent.toFixed(0)} % av inntekten din — over ~15 % blir økonomien stram.`);
+    }
+    if (recommendation.type !== 'lease') {
+      recommendation.caveats.push(`Ved leasing eier du ingenting til slutt; ved eie sitter du igjen med en bil verdt ~${formatKR(lvo8.residual)} etter 8 år.`);
+    }
+    recommendation.caveats.push('Verditap og drift er større kostnader enn rentene — la total kostnad, ikke renten alene, styre valget.');
+    recommendation.caveats.push('Forventet avkastning er usikker; se følsomhets-scenariene (3/5/7 %) for hvordan anbefalingen kan snu.');
+
     return {
       loanAmount,
       scenarios,
       bestKey,
       worstKey,
+      recommendation,
       totalDepreciation,
       totalDrift,
       monthlyDrift,
-      opportunityCost: { lostPerYear, lostTotal, bufferAfterPurchase, monthlyPercent, returnBands },
+      opportunityCost: { lostPerYear, lostTotal, lostTotalCompound, bufferAfterPurchase, monthlyPercent, returnBands, equityAlternatives },
+      yearlySeries,
+      wealthSeries,
+      costSplit,
       conclusion,
       advice,
     };
-  }, [bilPris, egenkapital, løpetid, avkastning, skatt, sparepenger, inntekt, verditap, driftskostnader, kostnadsøkning, leasingpris, renteJustering]);
+  }, [bilPris, egenkapital, løpetid, avkastning, skatt, sparepenger, inntekt, verditap, driftskostnader, kostnadsøkning, leasingpris, innskudd, renteJustering, kjørelengde]);
 }

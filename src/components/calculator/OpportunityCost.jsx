@@ -22,7 +22,7 @@ function StatCard({ label, value, variant = 'default' }) {
 const bandVariant = { 3: 'danger', 5: 'default', 7: 'success' };
 
 export default function OpportunityCost({ data, løpetid }) {
-  const { lostPerYear, lostTotal, bufferAfterPurchase, monthlyPercent, returnBands } = data;
+  const { lostPerYear, lostTotal, lostTotalCompound, bufferAfterPurchase, monthlyPercent, returnBands, equityAlternatives } = data;
 
   const bufferVariant = bufferAfterPurchase < 50000 ? 'danger' : 'success';
   const percentVariant = monthlyPercent > 15 ? 'danger' : monthlyPercent > 10 ? 'warning' : 'success';
@@ -55,6 +55,26 @@ export default function OpportunityCost({ data, løpetid }) {
       <p className="text-xs text-muted-foreground leading-relaxed mt-3">
         Avkastning er usikker. Ved lav avkastning taper du lite på å binde opp egenkapitalen
         (kontant lønner seg), ved høy avkastning taper du mer (lån lønner seg).
+      </p>
+
+      <h3 className="text-sm font-bold text-foreground/80 uppercase tracking-widest mt-8 mb-4">
+        Hva egenkapitalen kunne gitt i stedet (rentes-rente, over {løpetid} år)
+      </h3>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {equityAlternatives?.map((a) => (
+          <StatCard
+            key={a.key}
+            label={a.label}
+            value={formatKR(a.gain)}
+            variant={a.key === 'fond' ? 'success' : a.key === 'bolig' ? 'warning' : 'default'}
+          />
+        ))}
+      </div>
+      <p className="text-xs text-muted-foreground leading-relaxed mt-3">
+        I stedet for å binde egenkapitalen i bilen kunne den vokst. Med rentes-rente på forventet
+        avkastning ville tapt gevinst vært <span className="font-mono text-foreground">{formatKR(lostTotalCompound)}</span>
+        {" "}— høyere enn den enkle lineære modellen ({formatKR(lostTotal)}) fordi avkastning reinvesteres.
+        Nedbetaling av boliglån er en «risikofri» sammenligning lik boliglånsrenten.
       </p>
     </section>
   );

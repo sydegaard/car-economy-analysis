@@ -1,20 +1,17 @@
 import { useState } from "react";
 import { Zap, ChevronDown, X } from "lucide-react";
-import { formatKR, computeOwnership, FINANCING_OPTIONS } from "@/hooks/useCalculations";
+import { formatKR, computeOwnership, totalRunningCost, FINANCING_OPTIONS } from "@/hooks/useCalculations";
 import { EV_MODELS, carMidPrice, parseRangeKm } from "@/data/evModels";
 
 const PLACEHOLDER_IMAGE = "/car-placeholder.svg";
 
-// Case-insensitive exact match of a typed name against the model list.
 function findModel(name) {
   const n = name.trim().toLowerCase();
   return EV_MODELS.find((m) => m.name.toLowerCase() === n) || null;
 }
 
 function CarHeader({ car, isBest }) {
-  if (!car) {
-    return <span className="text-muted-foreground italic text-sm">Ingen bil valgt</span>;
-  }
+  if (!car) return <span className="text-muted-foreground italic text-sm">Ingen bil valgt</span>;
   return (
     <div className="flex flex-col items-center gap-2">
       <img
@@ -40,66 +37,125 @@ function CarHeader({ car, isBest }) {
   );
 }
 
-export default function CompareCars({ egenkapital, løpetid, skatt, verditap, driftskostnader, kostnadsøkning, bestKey }) {
-  const defaultFinancing =
-    FINANCING_OPTIONS.find((o) => o.key === bestKey)?.key || FINANCING_OPTIONS[0].key;
+function FormToggle({ value, onChange, idPrefix }) {
+  return (
+    <div className="inline-flex rounded-lg border border-border/60 overflow-hidden self-start" role="group" aria-label="Finansieringsform">
+      {[["loan", "Lån"], ["lease", "Leasing"]].map(([val, txt]) => (
+        <button
+          key={val}
+          id={`${idPrefix}-${val}`}
+          type="button"
+          onClick={() => onChange(val)}
+          className={`px-4 py-1.5 text-xs font-bold uppercase tracking-wider transition-colors ${value === val ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"}`}
+        >
+          {txt}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+const inputCls =
+  "bg-secondary border border-border text-foreground text-base h-12 rounded-md px-3 w-full " +
+  "focus:border-primary focus:ring-2 focus:ring-primary/30 focus:outline-none transition-all duration-200";
+
+// Module-scope so React keeps the input mounted (no focus loss while typing).
+function SearchField({ id, label, name, setName, form, setForm }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <label htmlFor={id} className="text-xs font-semibold text-foreground uppercase tracking-wide">{label}</label>
+      <div className="relative">
+        <input
+          id={id}
+          list="ev-model-list"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Søk etter modell…"
+          className={`${inputCls} pr-9`}
+        />
+        {name !== "" && (
+          <button
+            type="button"
+            onClick={() => setName("")}
+            aria-label="Tøm felt"
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+      <FormToggle value={form} onChange={setForm} idPrefix={id} />
+    </div>
+  );
+}
+
+export default function CompareCars({ egenkapital, løpetid, skatt, verditap, driftskostnader, kostnadsøkning, leasingpris, innskudd, bestKey }) {
+  const defaultFinancing = FINANCING_OPTIONS.find((o) => o.key === bestKey)?.key || FINANCING_OPTIONS[0].key;
 
   const [open, setOpen] = useState(true);
   const [financingKey, setFinancingKey] = useState(defaultFinancing);
   const [nameA, setNameA] = useState(EV_MODELS[0].name);
   const [nameB, setNameB] = useState(EV_MODELS[1].name);
+  const [formA, setFormA] = useState("loan");
+  const [formB, setFormB] = useState("lease");
 
-  const option =
-    FINANCING_OPTIONS.find((o) => o.key === financingKey) || FINANCING_OPTIONS[0];
+  const option = FINANCING_OPTIONS.find((o) => o.key === financingKey) || FINANCING_OPTIONS[0];
 
-  const carA = findModel(nameA);
-  const carB = findModel(nameB);
+  // Compute one car's economics under its chosen financing form.
+  const compute = (name, form) => {
+    const car = findModel(name);
+    if (!car) return null;
+    const price = carMidPrice(car);
+    const rangeKm = parseRangeKm(car);
+    if (form === "lease") {
+      const totalDrift = totalRunningCost(driftskostnader, løpetid, kostnadsøkning);
+      const monthlyDrift = løpetid > 0 ? totalDrift / (løpetid * 12) : driftskostnader / 12;
+      return {
+        car, form, rangeKm,
+        price: null,
+        startleie: innskudd || 0,
+        totalDepreciation: null,
+        totalDrift,
+        monthlyTotal: (leasingpris || 0) + monthlyDrift,
+        totalCost: (innskudd || 0) + (leasingpris || 0) * 12 * løpetid + totalDrift,
+      };
+    }
+    const e = computeOwnership(price, {
+      egenkapital, løpetid, skatt, verditap, driftskostnader, kostnadsøkning,
+      rate: option.rate, fee: option.fee,
+    });
+    return { car, form, rangeKm, price, startleie: null, ...e };
+  };
 
-  const econ = (car) =>
-    car
-      ? computeOwnership(carMidPrice(car), {
-          egenkapital,
-          løpetid,
-          skatt,
-          verditap,
-          driftskostnader,
-          kostnadsøkning,
-          rate: option.rate,
-          fee: option.fee,
-        })
-      : null;
+  const A = compute(nameA, formA);
+  const B = compute(nameB, formB);
 
-  const eA = econ(carA);
-  const eB = econ(carB);
-
-  // Winner = lowest total cost, only when both cars are resolved.
-  const bestSide =
-    eA && eB ? (eA.totalCost <= eB.totalCost ? "A" : "B") : null;
-  const diff = eA && eB ? Math.abs(eA.totalCost - eB.totalCost) : null;
-
+  const bestSide = A && B ? (A.totalCost <= B.totalCost ? "A" : "B") : null;
+  const diff = A && B ? Math.abs(A.totalCost - B.totalCost) : null;
   const eier = `eierperiode, ${løpetid} år`;
 
-  const rows = [
-    { label: "Kjøpesum", a: carA ? formatKR(carMidPrice(carA)) : "—", b: carB ? formatKR(carMidPrice(carB)) : "—" },
-    {
-      label: "Rekkevidde",
-      a: carA && parseRangeKm(carA) != null ? `${parseRangeKm(carA)} km` : "—",
-      b: carB && parseRangeKm(carB) != null ? `${parseRangeKm(carB)} km` : "—",
-    },
-    { label: `Verditap (${eier})`, a: eA ? formatKR(eA.totalDepreciation) : "—", b: eB ? formatKR(eB.totalDepreciation) : "—" },
-    { label: "Driftskostnader (totalt)", a: eA ? formatKR(eA.totalDrift) : "—", b: eB ? formatKR(eB.totalDrift) : "—" },
-    { label: "Total månedskostnad", highlight: true, a: eA ? formatKR(eA.monthlyTotal) : "—", b: eB ? formatKR(eB.monthlyTotal) : "—" },
-    {
-      label: `Total kostnad (${eier})`,
-      emphasis: true,
-      a: eA ? formatKR(eA.totalCost) : "—",
-      b: eB ? formatKR(eB.totalCost) : "—",
-    },
-  ];
+  const cell = (v) => (v == null ? <span className="text-muted-foreground">—</span> : <span>{v}</span>);
 
-  const inputCls =
-    "bg-secondary border border-border text-foreground text-base h-12 rounded-md px-3 w-full " +
-    "focus:border-primary focus:ring-2 focus:ring-primary/30 focus:outline-none transition-all duration-200";
+  const rows = [
+    {
+      label: "Finansieringsform",
+      render: (c) => c
+        ? <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${c.form === "lease" ? "bg-accent/15 text-accent" : "bg-primary/15 text-primary"}`}>{c.form === "lease" ? "Leasing" : "Lån"}</span>
+        : cell(null),
+    },
+    { label: "Kjøpesum", render: (c) => cell(c && c.price != null ? formatKR(c.price) : null) },
+    { label: "Rekkevidde", render: (c) => cell(c && c.rangeKm != null ? `${c.rangeKm} km` : null) },
+    { label: "Startleie (innskudd)", render: (c) => cell(c && c.form === "lease" ? formatKR(c.startleie) : null) },
+    {
+      label: `Verditap (${eier})`,
+      render: (c) => c && c.form === "lease"
+        ? <span className="text-muted-foreground italic">Ikke eier</span>
+        : cell(c ? formatKR(c.totalDepreciation) : null),
+    },
+    { label: "Driftskostnader (totalt)", render: (c) => cell(c ? formatKR(c.totalDrift) : null) },
+    { label: "Total månedskostnad", highlight: true, render: (c) => cell(c ? formatKR(c.monthlyTotal) : null) },
+    { label: `Total kostnad (${eier})`, emphasis: true, render: (c) => cell(c ? formatKR(c.totalCost) : null) },
+  ];
 
   return (
     <section aria-labelledby="compare-heading" className="mt-10">
@@ -119,80 +175,21 @@ export default function CompareCars({ egenkapital, løpetid, skatt, verditap, dr
       {open && (
       <div id="compare-body" className="bg-card rounded-2xl border border-border/50 p-6 md:p-8">
         {/* Controls */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-          <div className="flex flex-col gap-2">
-            <label htmlFor="compare-financing" className="text-xs font-semibold text-foreground uppercase tracking-wide">
-              Finansieringsløsning
-            </label>
-            <select
-              id="compare-financing"
-              value={financingKey}
-              onChange={(e) => setFinancingKey(e.target.value)}
-              className={inputCls}
-            >
-              {FINANCING_OPTIONS.map((o) => (
-                <option key={o.key} value={o.key}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="flex flex-col gap-2">
-            <label htmlFor="compare-a" className="text-xs font-semibold text-foreground uppercase tracking-wide">
-              Bil A
-            </label>
-            <div className="relative">
-              <input
-                id="compare-a"
-                list="ev-model-list"
-                value={nameA}
-                onChange={(e) => setNameA(e.target.value)}
-                placeholder="Søk etter modell…"
-                className={`${inputCls} pr-9`}
-              />
-              {nameA !== "" && (
-                <button
-                  type="button"
-                  onClick={() => setNameA("")}
-                  aria-label="Tøm felt"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-          </div>
-          <div className="flex flex-col gap-2">
-            <label htmlFor="compare-b" className="text-xs font-semibold text-foreground uppercase tracking-wide">
-              Bil B
-            </label>
-            <div className="relative">
-              <input
-                id="compare-b"
-                list="ev-model-list"
-                value={nameB}
-                onChange={(e) => setNameB(e.target.value)}
-                placeholder="Søk etter modell…"
-                className={`${inputCls} pr-9`}
-              />
-              {nameB !== "" && (
-                <button
-                  type="button"
-                  onClick={() => setNameB("")}
-                  aria-label="Tøm felt"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-          </div>
-          <datalist id="ev-model-list">
-            {EV_MODELS.map((m) => (
-              <option key={m.name} value={m.name} />
-            ))}
-          </datalist>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+          <SearchField id="compare-a" label="Bil A" name={nameA} setName={setNameA} form={formA} setForm={setFormA} />
+          <SearchField id="compare-b" label="Bil B" name={nameB} setName={setNameB} form={formB} setForm={setFormB} />
         </div>
+        <div className="flex flex-col gap-2 mb-6 max-w-xs">
+          <label htmlFor="compare-financing" className="text-xs font-semibold text-foreground uppercase tracking-wide">
+            Lånetype (ved lån)
+          </label>
+          <select id="compare-financing" value={financingKey} onChange={(e) => setFinancingKey(e.target.value)} className={inputCls}>
+            {FINANCING_OPTIONS.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+          </select>
+        </div>
+        <datalist id="ev-model-list">
+          {EV_MODELS.map((m) => <option key={m.name} value={m.name} />)}
+        </datalist>
 
         {/* Comparison table */}
         <div className="overflow-x-auto rounded-xl border border-border">
@@ -200,16 +197,10 @@ export default function CompareCars({ egenkapital, løpetid, skatt, verditap, dr
             <thead>
               <tr className="bg-secondary">
                 <th scope="col" className="text-left p-4 font-semibold text-foreground text-xs uppercase tracking-widest min-w-[150px]">
-                  <span className="flex items-center gap-1.5">
-                    <Zap className="w-3.5 h-3.5 text-primary" /> Nøkkeltall
-                  </span>
+                  <span className="flex items-center gap-1.5"><Zap className="w-3.5 h-3.5 text-primary" /> Nøkkeltall</span>
                 </th>
-                <th scope="col" className="p-4 align-top w-1/2">
-                  <CarHeader car={carA} isBest={bestSide === "A"} />
-                </th>
-                <th scope="col" className="p-4 align-top w-1/2">
-                  <CarHeader car={carB} isBest={bestSide === "B"} />
-                </th>
+                <th scope="col" className="p-4 align-top w-1/2"><CarHeader car={A?.car} isBest={bestSide === "A"} /></th>
+                <th scope="col" className="p-4 align-top w-1/2"><CarHeader car={B?.car} isBest={bestSide === "B"} /></th>
               </tr>
             </thead>
             <tbody>
@@ -226,10 +217,10 @@ export default function CompareCars({ egenkapital, løpetid, skatt, verditap, dr
                       {row.label}
                     </td>
                     <td className={`p-4 text-right font-mono ${hlY} ${row.emphasis ? "text-base" : ""} ${row.emphasis && bestSide === "A" ? "text-[hsl(var(--neon-green))]" : "text-foreground"}`}>
-                      {row.a}
+                      {row.render(A)}
                     </td>
                     <td className={`p-4 text-right font-mono ${hlY} ${row.highlight ? "border-r-2" : ""} ${row.emphasis ? "text-base" : ""} ${row.emphasis && bestSide === "B" ? "text-[hsl(var(--neon-green))]" : "text-foreground"}`}>
-                      {row.b}
+                      {row.render(B)}
                     </td>
                   </tr>
                 );
@@ -241,17 +232,13 @@ export default function CompareCars({ egenkapital, løpetid, skatt, verditap, dr
         {/* Difference summary */}
         {bestSide && diff > 0 && (
           <p className="mt-4 text-sm text-foreground">
-            <span className="font-bold text-[hsl(var(--neon-green))]">
-              {bestSide === "A" ? carA.name : carB.name}
-            </span>{" "}
-            er <span className="font-mono font-bold">{formatKR(diff)}</span> billigere i total kostnad over {løpetid} år
-            (finansiering: {option.label.toLowerCase()}).
+            <span className="font-bold text-[hsl(var(--neon-green))]">{bestSide === "A" ? A.car.name : B.car.name}</span>
+            {" "}({bestSide === "A" ? (A.form === "lease" ? "leasing" : "lån") : (B.form === "lease" ? "leasing" : "lån")})
+            {" "}er <span className="font-mono font-bold">{formatKR(diff)}</span> billigere i total kostnad over {løpetid} år.
           </p>
         )}
         {bestSide && diff === 0 && (
-          <p className="mt-4 text-sm text-muted-foreground">
-            Begge bilene har samme totale kostnad over perioden.
-          </p>
+          <p className="mt-4 text-sm text-muted-foreground">Begge alternativene har samme totale kostnad over perioden.</p>
         )}
       </div>
       )}

@@ -17,7 +17,9 @@ const fields = [
   { id: 'verditap', label: 'Årlig verditap (%)', hint: 'Elbil 10–15% · Bensin 15–20% · Luksus 20–30%', step: 1, min: 0, max: 40 },
   { id: 'driftskostnader', label: 'Årlige driftskostnader', hint: 'Første år: forsikring + strøm/drivstoff + service + bom', step: 5000 },
   { id: 'kostnadsøkning', label: 'Årlig kostnadsøkning (%)', hint: 'Hvor mye driftskostnaden stiger per år (service, dekk, reparasjoner). 0 = flat.', step: 1, min: 0, max: 20, optional: true },
+  { id: 'kjørelengde', label: 'Årlig kjørelengde (km)', hint: 'Brukes til råd og leasing km-tak', step: 5000, min: 0, optional: true },
   { id: 'leasingpris', label: 'Månedlig leasingpris', hint: 'Kun leieavgift — drift regnes separat', step: 500, optional: true },
+  { id: 'innskudd', label: 'Leasing startleie (innskudd)', hint: 'Engangsbeløp ved leasingstart', step: 5000, min: 0, optional: true },
 ];
 
 function MarginalskattField({ value, onChange }) {

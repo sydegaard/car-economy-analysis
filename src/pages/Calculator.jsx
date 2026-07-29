@@ -7,6 +7,9 @@ import ConclusionBox from "../components/calculator/ConclusionBox";
 import AdviceGrid from "../components/calculator/AdviceGrid";
 import CarCarousel from "../components/calculator/CarCarousel";
 import CompareCars from "../components/calculator/CompareCars";
+import CostCharts from "../components/calculator/CostCharts";
+import LeaseVsOwn from "../components/calculator/LeaseVsOwn";
+import RecommendationBox from "../components/calculator/RecommendationBox";
 import SensitivitySlider from "../components/calculator/SensitivitySlider";
 
 const DEFAULT_VALUES = {
@@ -20,7 +23,9 @@ const DEFAULT_VALUES = {
   verditap: 15,
   driftskostnader: 30000,
   kostnadsøkning: 5,
+  kjørelengde: 15000,
   leasingpris: 5500,
+  innskudd: 0,
   renteJustering: 0,
 };
 
@@ -86,6 +91,17 @@ export default function Calculator() {
             løpetid={values.løpetid}
           />
 
+          <CostCharts
+            yearlySeries={result.yearlySeries}
+            wealthSeries={result.wealthSeries}
+            costSplit={result.costSplit}
+            scenarios={result.scenarios}
+            bestKey={result.bestKey}
+            worstKey={result.worstKey}
+            monthlyDrift={result.monthlyDrift}
+            leasingpris={values.leasingpris}
+          />
+
           <OpportunityCost data={result.opportunityCost} løpetid={values.løpetid} />
 
           <CompareCars
@@ -95,10 +111,29 @@ export default function Calculator() {
             verditap={values.verditap}
             driftskostnader={values.driftskostnader}
             kostnadsøkning={values.kostnadsøkning}
+            leasingpris={values.leasingpris}
+            innskudd={values.innskudd}
             bestKey={result.bestKey}
           />
 
+          <LeaseVsOwn
+            bilPris={values.bilPris}
+            egenkapital={values.egenkapital}
+            løpetid={values.løpetid}
+            skatt={values.skatt}
+            verditap={values.verditap}
+            driftskostnader={values.driftskostnader}
+            kostnadsøkning={values.kostnadsøkning}
+            leasingpris={values.leasingpris}
+            innskudd={values.innskudd}
+            kjørelengde={values.kjørelengde}
+            rate={(result.scenarios[result.bestKey] || result.scenarios.billån1).rate}
+            rateLabel={(result.scenarios[result.bestKey] || result.scenarios.billån1).short}
+          />
+
           <ConclusionBox conclusion={result.conclusion} />
+
+          <RecommendationBox recommendation={result.recommendation} />
 
           <AdviceGrid advice={result.advice} />
         </main>
